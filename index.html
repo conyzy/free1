@@ -1,1569 +1,699 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>主流币实时信号 | 三重过滤 · 多周期确认 · 币安实时</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <style>
-    :root {
-      --bg:#0d1117;--bg2:#161b22;--bg3:#1c2333;--border:#30363d;
-      --accent:#f7931a;--green:#3fb950;--red:#f85149;--blue:#58a6ff;
-      --purple:#bc8cff;--yellow:#e3b341;--cyan:#39d0d6;
-      --text:#e6edf3;--text2:#8b949e;
-    }
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{background:var(--bg);color:var(--text);font-family:'Segoe UI','PingFang SC',system-ui,sans-serif;line-height:1.6;}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>加密货币三重过滤实时监控</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b0f1a;color:#e2e8f0;font-family:'Segoe UI',sans-serif;font-size:14px}
+:root{
+  --green:#00c853;--red:#ff3d57;--yellow:#ffd600;--blue:#2979ff;
+  --gray:#4a5568;--bg1:#111827;--bg2:#1a2035;--bg3:#243050;
+  --border:#2d3748
+}
 
-    /* Header */
-    header{background:linear-gradient(135deg,#0d1117 0%,#1a2a3e 50%,#0d1117 100%);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-    .logo{display:flex;align-items:center;gap:10px;}
-    .logo-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--cyan),#0891b2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
-    .logo-text{font-size:15px;font-weight:700;}
-    .logo-sub{font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;}
-    .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+/* ── 顶部状态栏 ── */
+#topbar{background:#0d1117;border-bottom:1px solid var(--border);
+  padding:8px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+#topbar .logo{font-size:18px;font-weight:700;color:#fff;letter-spacing:.5px}
+#topbar .logo span{color:var(--blue)}
+.conn-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px}
+.conn-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.conn-dot.ng{background:var(--red)}
+.conn-dot.wait{background:var(--yellow)}
+#connStatus{font-size:12px;display:flex;align-items:center;gap:6px}
+.lastUpdate{color:#64748b;font-size:11px;margin-left:auto}
 
-    /* Status bar */
-    #wsStatusBar{display:flex;align-items:center;gap:10px;padding:6px 24px;font-size:12px;background:var(--bg2);border-bottom:1px solid var(--border);}
-    .ws-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-    .ws-connecting{background:var(--yellow);animation:pulse 1.2s infinite;}
-    .ws-connected{background:var(--green);box-shadow:0 0 6px var(--green);}
-    .ws-error{background:var(--red);}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* ── 布局 ── */
+.main-wrap{display:flex;height:calc(100vh - 44px);overflow:hidden}
+.sidebar{width:240px;min-width:200px;background:var(--bg1);
+  border-right:1px solid var(--border);overflow-y:auto;padding:10px 8px}
+.content{flex:1;overflow-y:auto;padding:14px}
 
-    /* Container */
-    .container{max-width:1600px;margin:0 auto;padding:16px 24px;}
-    .section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
-    .section-title::before{content:'';display:inline-block;width:3px;height:13px;background:var(--cyan);border-radius:2px;}
+/* ── 侧边栏币种卡 ── */
+.coin-card{border-radius:10px;padding:10px 12px;margin-bottom:8px;
+  background:var(--bg2);border:1px solid var(--border);cursor:pointer;
+  transition:all .2s}
+.coin-card:hover,.coin-card.active{border-color:var(--blue);background:var(--bg3)}
+.coin-card .name{font-weight:700;font-size:15px}
+.coin-card .price{font-size:18px;font-weight:700;margin:4px 0}
+.coin-card .chg{font-size:12px}
+.coin-card .sig-badges{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;
+  border-radius:12px;font-size:11px;font-weight:600;gap:3px}
+.badge.long{background:rgba(0,200,83,.18);color:var(--green);border:1px solid rgba(0,200,83,.4)}
+.badge.short{background:rgba(255,61,87,.18);color:var(--red);border:1px solid rgba(255,61,87,.4)}
+.badge.wait{background:rgba(255,214,0,.12);color:var(--yellow);border:1px solid rgba(255,214,0,.3)}
+.badge.neutral{background:rgba(74,85,104,.3);color:#94a3b8;border:1px solid var(--border)}
+.badge.tf{font-size:10px;padding:1px 5px}
 
-    /* Coin tabs */
-    .coin-nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
-    .coin-btn{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s;font-size:13px;font-weight:600;color:var(--text2);}
-    .coin-btn:hover{border-color:var(--cyan);color:var(--text);}
-    .coin-btn.active{border-color:var(--cyan);background:rgba(57,208,214,.1);color:var(--cyan);}
-    .coin-btn .coin-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;}
-    .coin-btn .coin-price{font-size:11px;font-weight:700;margin-top:1px;}
-    .coin-btn .coin-signal{font-size:9px;padding:1px 6px;border-radius:8px;margin-top:2px;font-weight:700;}
-    .sig-bull{background:rgba(63,185,80,.15);color:var(--green);}
-    .sig-bear{background:rgba(248,81,73,.15);color:var(--red);}
-    .sig-wait{background:rgba(227,179,65,.15);color:var(--yellow);}
-    .sig-none{background:rgba(139,148,158,.1);color:var(--text2);}
-    .coin-btn .coin-chg{font-size:10px;}
+/* ── 内容区顶部信号卡 ── */
+.signal-hero{background:var(--bg1);border-radius:14px;padding:18px 22px;
+  margin-bottom:14px;border:2px solid var(--border);position:relative;overflow:hidden}
+.signal-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.signal-hero.long::before{background:linear-gradient(90deg,var(--green),transparent)}
+.signal-hero.short::before{background:linear-gradient(90deg,var(--red),transparent)}
+.signal-hero.wait::before{background:linear-gradient(90deg,var(--yellow),transparent)}
+.hero-top{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.hero-signal{font-size:26px;font-weight:800;display:flex;align-items:center;gap:10px}
+.hero-signal .arrow{font-size:32px}
+.hero-meta{font-size:12px;color:#64748b;margin-top:4px}
+.conf-ring{position:relative;width:80px;height:80px}
+.conf-ring canvas{position:absolute;top:0;left:0}
+.conf-pct{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:16px;font-weight:700}
 
-    /* TF tabs */
-    .tf-nav{display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:8px;padding:3px;width:fit-content;}
-    .tf-btn{padding:5px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);transition:all .2s;border:none;background:none;}
-    .tf-btn.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.4);}
+/* ── 三周期确认行 ── */
+.tf-confirm-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.tf-box{background:var(--bg2);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.tf-box .tf-label{font-size:11px;color:#64748b;margin-bottom:6px;
+  display:flex;align-items:center;justify-content:space-between}
+.tf-box .tf-sig{font-size:16px;font-weight:700}
+.tf-box .tf-strat{font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.5}
+.tf-box.long{border-color:rgba(0,200,83,.5)}
+.tf-box.short{border-color:rgba(255,61,87,.5)}
+.tf-box.wait{border-color:rgba(255,214,0,.4)}
 
-    /* Multi-TF summary row */
-    .mtf-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;}
-    .mtf-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
-    .mtf-card:hover{border-color:var(--cyan);}
-    .mtf-card.active-tf{border-color:var(--cyan);background:rgba(57,208,214,.05);}
-    .mtf-card.bull-tf{border-color:rgba(63,185,80,.5);}
-    .mtf-card.bear-tf{border-color:rgba(248,81,73,.5);}
-    .mtf-card.wait-tf{border-color:rgba(227,179,65,.4);}
-    .mtf-tf-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
-    .mtf-dir{font-size:18px;font-weight:800;margin-bottom:4px;}
-    .mtf-dir.bull{color:var(--green);}
-    .mtf-dir.bear{color:var(--red);}
-    .mtf-dir.wait{color:var(--yellow);}
-    .mtf-dir.none{color:var(--text2);}
-    .mtf-meta{font-size:10px;color:var(--text2);}
-    .mtf-badge{font-size:9px;padding:2px 7px;border-radius:8px;font-weight:700;}
-    .mtf-strategy{font-size:11px;color:var(--text2);margin-top:5px;line-height:1.4;padding-top:5px;border-top:1px solid rgba(48,54,61,.5);}
+/* ── 开单参数 ── */
+.entry-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
+.entry-cell{background:var(--bg2);border-radius:8px;padding:10px;text-align:center;
+  border:1px solid var(--border)}
+.entry-cell .ec-label{font-size:10px;color:#64748b;margin-bottom:4px}
+.entry-cell .ec-val{font-size:14px;font-weight:700}
 
-    /* Signal main card */
-    .signal-alert-card{border-radius:16px;overflow:hidden;border:2px solid var(--border);transition:border-color .4s;margin-bottom:18px;}
-    .signal-alert-card.bull{border-color:var(--green);}
-    .signal-alert-card.bear{border-color:var(--red);}
-    .signal-alert-card.wait{border-color:var(--yellow);}
-    .signal-alert-card.noentry{border-color:var(--text2);}
-    .signal-alert-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;}
-    .bull .signal-alert-header{background:linear-gradient(135deg,rgba(63,185,80,.16),rgba(63,185,80,.04));}
-    .bear .signal-alert-header{background:linear-gradient(135deg,rgba(248,81,73,.16),rgba(248,81,73,.04));}
-    .wait .signal-alert-header{background:linear-gradient(135deg,rgba(227,179,65,.16),rgba(227,179,65,.04));}
-    .noentry .signal-alert-header{background:rgba(22,27,34,.8);}
-    .signal-main-dir{display:flex;align-items:center;gap:14px;}
-    .dir-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;flex-shrink:0;}
-    .bull .dir-icon{background:rgba(63,185,80,.2);color:var(--green);}
-    .bear .dir-icon{background:rgba(248,81,73,.2);color:var(--red);}
-    .wait .dir-icon{background:rgba(227,179,65,.2);color:var(--yellow);}
-    .noentry .dir-icon{background:rgba(139,148,158,.12);color:var(--text2);}
-    .dir-label{font-size:11px;color:var(--text2);margin-bottom:2px;}
-    .dir-title{font-size:24px;font-weight:900;line-height:1.1;}
-    .bull .dir-title{color:var(--green);}
-    .bear .dir-title{color:var(--red);}
-    .wait .dir-title{color:var(--yellow);}
-    .noentry .dir-title{color:var(--text2);}
-    .dir-sub{font-size:11px;color:var(--text2);margin-top:4px;}
+/* ── 过滤指标条 ── */
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 
-    /* Conf ring */
-    .conf-ring-wrap{position:relative;width:78px;height:78px;flex-shrink:0;}
-    .conf-ring-wrap svg{transform:rotate(-90deg);}
-    .conf-ring-bg{fill:none;stroke:var(--bg3);stroke-width:8;}
-    .conf-ring-fill{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .8s ease;}
-    .conf-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
-    .conf-pct{font-size:17px;font-weight:800;}
-    .conf-text{font-size:9px;color:var(--text2);}
+/* ── 图表区 ── */
+.chart-section{background:var(--bg1);border-radius:14px;padding:16px;
+  margin-bottom:14px;border:1px solid var(--border)}
+.chart-section h3{font-size:14px;font-weight:600;margin-bottom:10px;
+  color:#94a3b8;display:flex;align-items:center;gap:8px}
+.chart-wrap{height:280px;position:relative}
 
-    /* Order grid */
-    .signal-order-grid{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid rgba(48,54,61,.5);}
-    .order-item{padding:12px 16px;border-right:1px solid rgba(48,54,61,.5);background:var(--bg2);}
-    .order-item:last-child{border-right:none;}
-    .order-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
-    .order-val{font-size:16px;font-weight:800;}
-    .order-sub{font-size:10px;color:var(--text2);margin-top:2px;}
-    .entry{color:var(--accent);}.sl{color:var(--red);}.tp1{color:var(--green);}.tp2{color:#58ff82;}.rr{color:var(--cyan);}
+/* ── 历史记录 ── */
+.history-section{background:var(--bg1);border-radius:14px;padding:16px;
+  border:1px solid var(--border)}
+.history-section h3{font-size:14px;font-weight:600;margin-bottom:10px;color:#94a3b8}
+.hist-table{width:100%;border-collapse:collapse;font-size:12px}
+.hist-table th{color:#64748b;text-align:left;padding:6px 8px;
+  border-bottom:1px solid var(--border);font-weight:500}
+.hist-table td{padding:7px 8px;border-bottom:1px solid rgba(45,55,72,.5)}
+.hist-table tr:last-child td{border-bottom:none}
+.pnl-pos{color:var(--green)} .pnl-neg{color:var(--red)}
 
-    /* Filter badges */
-    .filter-badge-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
-    .filter-badge{display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;}
-    .fb-pass{background:rgba(63,185,80,.1);color:var(--green);border-color:rgba(63,185,80,.3);}
-    .fb-fail{background:rgba(248,81,73,.1);color:var(--red);border-color:rgba(248,81,73,.3);}
-    .fb-warn{background:rgba(227,179,65,.1);color:var(--yellow);border-color:rgba(227,179,65,.3);}
+/* ── Toast ── */
+#toastWrap{position:fixed;top:54px;right:16px;z-index:9999;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:var(--bg2);border-radius:10px;padding:12px 16px;
+  min-width:260px;max-width:320px;border-left:4px solid var(--green);
+  box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:all;
+  animation:slideIn .3s ease}
+.toast.short{border-left-color:var(--red)}
+.toast.wait{border-left-color:var(--yellow)}
+@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:none;opacity:1}}
+.toast-title{font-weight:700;font-size:13px;margin-bottom:4px}
+.toast-body{font-size:11px;color:#94a3b8;line-height:1.6}
 
-    /* KPI */
-    .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px;}
-    .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;transition:transform .2s,border-color .2s;}
-    .kpi-card:hover{transform:translateY(-2px);border-color:var(--cyan);}
-    .kpi-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
-    .kpi-value{font-size:22px;font-weight:700;line-height:1;}
-    .kpi-sub{font-size:10px;color:var(--text2);margin-top:4px;}
-    .green{color:var(--green);}.red{color:var(--red);}.blue{color:var(--blue);}.cyan{color:var(--cyan);}.accent{color:var(--accent);}.purple{color:var(--purple);}
-
-    /* Card */
-    .card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;}
-    .card-title{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
-    .chart-wrap{position:relative;height:250px;}
-
-    /* Main grid */
-    .main-grid{display:grid;grid-template-columns:1fr 350px;gap:16px;margin-bottom:16px;}
-    .filter-panel{display:flex;flex-direction:column;gap:10px;}
-    .filter-card{background:var(--bg3);border-radius:11px;padding:12px;}
-    .filter-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-    .filter-name{font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px;}
-    .filter-icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;}
-    .filter-status{padding:2px 8px;border-radius:11px;font-size:10px;font-weight:600;}
-    .status-pass{background:rgba(63,185,80,.15);color:var(--green);}
-    .status-fail{background:rgba(248,81,73,.15);color:var(--red);}
-    .filter-values{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;}
-    .filter-val{background:var(--bg2);border-radius:6px;padding:5px 8px;}
-    .filter-val-label{font-size:9px;color:var(--text2);}
-    .filter-val-num{font-size:12px;font-weight:700;}
-
-    /* Signal history */
-    .signal-history{display:flex;flex-direction:column;}
-    .sh-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(48,54,61,.35);font-size:12px;}
-    .sh-item:last-child{border-bottom:none;}
-    .sh-item:hover{background:var(--bg3);border-radius:8px;}
-    .sh-badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;min-width:44px;text-align:center;flex-shrink:0;}
-    .sh-bull{background:rgba(63,185,80,.15);color:var(--green);}
-    .sh-bear{background:rgba(248,81,73,.15);color:var(--red);}
-    .sh-tf{background:rgba(57,208,214,.12);color:var(--cyan);font-size:10px;padding:1px 6px;border-radius:6px;flex-shrink:0;}
-    .sh-time{color:var(--text2);width:90px;flex-shrink:0;}
-    .sh-price{font-weight:700;min-width:90px;}
-    .sh-sl{color:var(--red);min-width:85px;}
-    .sh-tp{color:var(--green);min-width:85px;}
-    .sh-result{font-weight:600;margin-left:auto;}
-    .sh-win{color:var(--green);}.sh-loss{color:var(--red);}.sh-open{color:var(--yellow);}
-    .sh-conf{color:var(--text2);font-size:11px;min-width:42px;text-align:right;}
-
-    /* Risk grid */
-    .risk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
-    .risk-item{background:var(--bg3);border-radius:10px;padding:12px;}
-    .risk-item-title{font-size:11px;color:var(--text2);margin-bottom:7px;}
-    .risk-val{font-size:19px;font-weight:700;}
-    .risk-desc{font-size:10px;color:var(--text2);margin-top:3px;}
-    .progress-bar{width:100%;height:4px;background:rgba(48,54,61,.6);border-radius:3px;margin-top:7px;overflow:hidden;}
-    .progress-fill{height:100%;border-radius:3px;}
-    .fill-green{background:linear-gradient(90deg,var(--green),#2ea043);}
-    .fill-red{background:linear-gradient(90deg,#f85149,#da3633);}
-    .fill-cyan{background:linear-gradient(90deg,var(--cyan),#0891b2);}
-    .fill-yellow{background:linear-gradient(90deg,var(--yellow),#d29922);}
-
-    /* Tabs */
-    .tabs{display:flex;gap:2px;margin-bottom:14px;background:var(--bg3);border-radius:8px;padding:3px;width:fit-content;}
-    .tab{padding:5px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .2s;border:none;background:none;}
-    .tab.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.4);}
-    .tab-content{display:none;}.tab-content.active{display:block;}
-
-    /* Rule table */
-    .rule-table{width:100%;border-collapse:collapse;font-size:12px;}
-    .rule-table th{text-align:left;color:var(--text2);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;padding:6px 10px;border-bottom:1px solid var(--border);}
-    .rule-table td{padding:8px 10px;border-bottom:1px solid rgba(48,54,61,.5);vertical-align:middle;}
-    .rule-table tr:last-child td{border-bottom:none;}
-    .rule-table tr:hover td{background:var(--bg3);}
-    .tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;margin-right:3px;}
-    .tag-long{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);}
-    .tag-short{background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.3);}
-    .tag-both{background:rgba(88,166,255,.15);color:var(--blue);border:1px solid rgba(88,166,255,.3);}
-
-    /* Toast */
-    .toast-container{position:fixed;top:70px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
-    .toast{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:12px 15px;min-width:290px;max-width:350px;box-shadow:0 8px 28px rgba(0,0,0,.5);pointer-events:all;animation:toastIn .3s ease;}
-    .toast.bull{border-left:4px solid var(--green);}
-    .toast.bear{border-left:4px solid var(--red);}
-    @keyframes toastIn{from{opacity:0;transform:translateX(36px);}to{opacity:1;transform:translateX(0);}}
-    .toast-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
-    .toast-title{font-size:13px;font-weight:700;}
-    .toast.bull .toast-title{color:var(--green);}.toast.bear .toast-title{color:var(--red);}
-    .toast-close{cursor:pointer;color:var(--text2);font-size:15px;}
-    .toast-close:hover{color:var(--text);}
-    .toast-row{display:flex;justify-content:space-between;font-size:11px;margin-top:2px;}
-    .toast-row .label{color:var(--text2);}.toast-row .val{font-weight:600;}
-
-    /* Overview grid */
-    .overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
-    .overview-card{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:14px;cursor:pointer;transition:all .2s;}
-    .overview-card:hover{border-color:var(--cyan);transform:translateY(-2px);}
-    .overview-card.active{border-color:var(--cyan);background:rgba(57,208,214,.05);}
-    .overview-card.ov-bull{border-color:rgba(63,185,80,.45);}
-    .overview-card.ov-bear{border-color:rgba(248,81,73,.45);}
-    .ov-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-    .ov-symbol{font-size:14px;font-weight:800;}
-    .ov-price{font-size:13px;font-weight:700;color:var(--accent);}
-    .ov-chg{font-size:11px;font-weight:600;}
-    .ov-tfs{display:flex;gap:5px;margin-top:6px;}
-    .ov-tf-dot{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;}
-    .ov-tf-bull{background:rgba(63,185,80,.15);color:var(--green);}
-    .ov-tf-bear{background:rgba(248,81,73,.15);color:var(--red);}
-    .ov-tf-wait{background:rgba(227,179,65,.12);color:var(--yellow);}
-    .ov-tf-none{background:rgba(139,148,158,.1);color:var(--text2);}
-
-    /* Loading */
-    #loadingOverlay{position:fixed;inset:0;background:rgba(13,17,23,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9000;gap:16px;}
-    .spinner{width:48px;height:48px;border:4px solid var(--bg3);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;}
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .loading-text{font-size:14px;color:var(--text2);}
-
-    /* Disclaimer */
-    .disclaimer{background:rgba(57,208,214,.06);border:1px solid rgba(57,208,214,.2);border-radius:10px;padding:12px 15px;font-size:11px;color:var(--text2);margin-top:16px;display:flex;gap:10px;}
-
-    /* Dot */
-    .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;}
-    .dot-green{background:var(--green);box-shadow:0 0 5px var(--green);}
-    .dot-red{background:var(--red);box-shadow:0 0 5px var(--red);}
-    .dot-yellow{background:var(--yellow);}
-    .dot-gray{background:var(--text2);}
-
-    /* Responsive */
-    @media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,1fr);}.main-grid{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(2,1fr);}}
-    @media(max-width:768px){.container{padding:8px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.signal-order-grid{grid-template-columns:repeat(2,1fr);}.mtf-row{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(2,1fr);}}
-  </style>
+/* ── 自适应 ── */
+@media(max-width:768px){
+  .main-wrap{flex-direction:column}
+  .sidebar{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--border);
+    display:flex;overflow-x:auto;gap:8px;padding:8px}
+  .coin-card{min-width:150px;margin-bottom:0}
+  .entry-grid{grid-template-columns:repeat(3,1fr)}
+  .tf-confirm-row{grid-template-columns:1fr}
+}
+</style>
 </head>
 <body>
 
-<!-- Loading -->
-<div id="loadingOverlay">
-  <div class="spinner"></div>
-  <div class="loading-text" id="loadingMsg">正在连接币安实时数据...</div>
+<div id="topbar">
+  <div class="logo">Crypto <span>Signal</span> Pro</div>
+  <div id="connStatus">
+    <span class="conn-dot wait" id="connDot"></span>
+    <span id="connText">连接中...</span>
+  </div>
+  <div class="lastUpdate">最后更新: <span id="lastUpdateTime">--</span></div>
 </div>
 
-<!-- Toast -->
-<div class="toast-container" id="toastContainer"></div>
+<div id="toastWrap"></div>
 
-<!-- Header -->
-<header>
-  <div class="logo">
-    <div class="logo-icon">◆</div>
-    <div>
-      <div class="logo-text">主流合约 · 三重过滤多周期信号系统</div>
-      <div class="logo-sub">Binance Futures · BTC / ETH / SOL / BNB · Real-time v4.0</div>
-    </div>
-  </div>
-  <div class="header-right">
-    <div style="font-size:20px;font-weight:800;color:var(--accent);display:flex;align-items:center;gap:8px;">
-      <span id="headerPrice">--</span>
-      <span id="headerChange" style="font-size:13px;font-weight:600;">--</span>
-    </div>
-    <span id="headerSymbol" style="background:rgba(247,147,26,.12);color:var(--accent);border:1px solid rgba(247,147,26,.3);padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;">BTC/USDT</span>
-    <span id="wsBadge" style="background:rgba(227,179,65,.15);color:var(--yellow);border:1px solid rgba(227,179,65,.3);padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;">
-      <span class="dot dot-yellow" style="animation:pulse 1s infinite"></span>连接中
-    </span>
-    <span style="font-size:11px;color:var(--text2);" id="clockDisplay">--:--:--</span>
-  </div>
-</header>
-
-<!-- WS Status -->
-<div id="wsStatusBar">
-  <div class="ws-dot ws-connecting" id="wsDot"></div>
-  <span id="wsStatusText" style="color:var(--yellow)">正在连接币安 WebSocket...</span>
-  <span style="color:var(--text2);margin-left:auto;" id="wsLastUpdate">--</span>
-</div>
-
-<div class="container">
-
-  <!-- ── 总览面板 ── -->
-  <div class="section-title">📊 四币种实时总览</div>
-  <div class="overview-grid" id="overviewGrid">
-    <!-- 动态填充 -->
+<div class="main-wrap">
+  <!-- 侧边栏：四币种概览 -->
+  <div class="sidebar" id="sidebar">
+    <div style="color:#64748b;font-size:11px;margin-bottom:8px;padding:0 4px">📊 币种概览</div>
+    <!-- 动态生成 -->
   </div>
 
-  <!-- ── 币种选择 ── -->
-  <div class="section-title">🎛 选择交易对与周期</div>
-  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
-    <div class="coin-nav" id="coinNav"></div>
-    <div class="tf-nav" id="tfNav">
-      <button class="tf-btn" data-tf="15m" onclick="switchTF('15m')">15m</button>
-      <button class="tf-btn active" data-tf="1h" onclick="switchTF('1h')">1H</button>
-      <button class="tf-btn" data-tf="4h" onclick="switchTF('4h')">4H</button>
-    </div>
-  </div>
-
-  <!-- ── 三周期联合确认 ── -->
-  <div class="section-title">🔭 三周期联合确认</div>
-  <div class="mtf-row" id="mtfRow">
-    <div class="mtf-card" id="mtf-15m" onclick="switchTF('15m')">
-      <div class="mtf-tf-label">15分钟<span id="mtf-15m-badge" class="mtf-badge sig-none">加载中</span></div>
-      <div class="mtf-dir none" id="mtf-15m-dir">--</div>
-      <div class="mtf-meta" id="mtf-15m-meta">等待数据...</div>
-      <div class="mtf-strategy" id="mtf-15m-strategy">15m周期适合短线/日内交易，信号快速但噪音多，需结合高周期方向</div>
-    </div>
-    <div class="mtf-card" id="mtf-1h" onclick="switchTF('1h')">
-      <div class="mtf-tf-label">1小时<span id="mtf-1h-badge" class="mtf-badge sig-none">加载中</span></div>
-      <div class="mtf-dir none" id="mtf-1h-dir">--</div>
-      <div class="mtf-meta" id="mtf-1h-meta">等待数据...</div>
-      <div class="mtf-strategy" id="mtf-1h-strategy">1H周期是主要交易周期，用于确认日内趋势，平衡频率与质量</div>
-    </div>
-    <div class="mtf-card" id="mtf-4h" onclick="switchTF('4h')">
-      <div class="mtf-tf-label">4小时<span id="mtf-4h-badge" class="mtf-badge sig-none">加载中</span></div>
-      <div class="mtf-dir none" id="mtf-4h-dir">--</div>
-      <div class="mtf-meta" id="mtf-4h-meta">等待数据...</div>
-      <div class="mtf-strategy" id="mtf-4h-strategy">4H周期定义中期趋势，信号质量高，持仓时间较长</div>
-    </div>
-  </div>
-
-  <!-- ── 实时开单信号 ── -->
-  <div class="section-title">🎯 实时开单信号（当前周期）</div>
-  <div class="signal-alert-card noentry" id="signalAlertCard">
-    <div class="signal-alert-header" id="signalAlertHeader">
-      <div class="signal-main-dir">
-        <div class="dir-icon" id="dirIcon">⏳</div>
+  <!-- 主内容区 -->
+  <div class="content" id="content">
+    <!-- 信号英雄卡 -->
+    <div class="signal-hero" id="signalHero">
+      <div class="hero-top">
         <div>
-          <div class="dir-label" id="signalLabel">三重过滤信号 · 币安实时数据</div>
-          <div class="dir-title" id="dirTitle">数据加载中...</div>
-          <div class="dir-sub"  id="dirSub">等待币安 K 线数据...</div>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-        <div class="conf-ring-wrap">
-          <svg width="78" height="78" viewBox="0 0 78 78">
-            <circle class="conf-ring-bg" cx="39" cy="39" r="31"/>
-            <circle class="conf-ring-fill" id="confRingFill" cx="39" cy="39" r="31"
-              stroke-dasharray="194.8" stroke-dashoffset="194.8" stroke="var(--cyan)"/>
-          </svg>
-          <div class="conf-center">
-            <div class="conf-pct" id="confPct" style="color:var(--cyan)">--%</div>
-            <div class="conf-text">置信度</div>
+          <div class="hero-signal" id="heroSignal">
+            <span class="arrow" id="heroArrow">⏳</span>
+            <span id="heroText">正在加载...</span>
           </div>
+          <div class="hero-meta" id="heroMeta">等待数据...</div>
         </div>
-        <div style="font-size:10px;color:var(--text2);">综合评分</div>
+        <div class="conf-ring">
+          <canvas id="confCanvas" width="80" height="80"></canvas>
+          <div class="conf-pct" id="confPct">--</div>
+        </div>
       </div>
-    </div>
-    <div class="signal-order-grid">
-      <div class="order-item"><div class="order-label">📍 建议开单价</div><div class="order-val entry" id="entryPrice">--</div><div class="order-sub" id="entryNote">--</div></div>
-      <div class="order-item"><div class="order-label">🛑 止损 SL</div><div class="order-val sl" id="slPrice">--</div><div class="order-sub" id="slNote">ATR×1.5 动态止损</div></div>
-      <div class="order-item"><div class="order-label">🎯 止盈一 TP1</div><div class="order-val tp1" id="tp1Price">--</div><div class="order-sub" id="tp1Note">ATR×2.5 · 减仓50%</div></div>
-      <div class="order-item"><div class="order-label">🚀 止盈二 TP2</div><div class="order-val tp2" id="tp2Price">--</div><div class="order-sub" id="tp2Note">ATR×4.5 · 全仓平</div></div>
-      <div class="order-item"><div class="order-label">⚖️ 盈亏比 R:R</div><div class="order-val rr" id="rrVal">--</div><div class="order-sub" id="rrNote">风险收益比</div></div>
-    </div>
-  </div>
 
-  <!-- filter badges -->
-  <div class="filter-badge-row" id="filterBadgeRow">
-    <div class="filter-badge fb-warn" id="fb-adx">⏳ ADX 趋势强度</div>
-    <div class="filter-badge fb-warn" id="fb-di">⏳ DI 方向</div>
-    <div class="filter-badge fb-warn" id="fb-macd">⏳ MACD 动量</div>
-    <div class="filter-badge fb-warn" id="fb-rsi">⏳ RSI 时机</div>
-    <div class="filter-badge fb-warn" id="fb-zero">⏳ 零轴同侧</div>
-    <div class="filter-badge fb-warn" id="fb-mtf">⏳ 多周期一致性</div>
-  </div>
+      <!-- 过滤层 badges -->
+      <div class="filter-row" id="filterRow">
+        <span class="badge neutral">ADX趋势</span>
+        <span class="badge neutral">DI方向</span>
+        <span class="badge neutral">MACD动量</span>
+        <span class="badge neutral">RSI时机</span>
+        <span class="badge neutral">零轴同侧</span>
+      </div>
 
-  <!-- signal history -->
-  <div class="card">
-    <div class="card-title">
-      <span>📜 信号记录</span>
-      <span style="font-size:11px;color:var(--text2);" id="historyMeta">最近 10 条</span>
-    </div>
-    <div class="signal-history" id="signalHistory">
-      <div style="text-align:center;color:var(--text2);padding:20px;font-size:12px;">等待信号生成...</div>
-    </div>
-  </div>
+      <!-- 三周期确认 -->
+      <div class="tf-confirm-row" id="tfConfirmRow">
+        <div class="tf-box" id="tf15m">
+          <div class="tf-label">15分钟 <span class="badge tf neutral">等待</span></div>
+          <div class="tf-sig">--</div>
+          <div class="tf-strat">短线做单 · R:R 1:1.5<br>止损 ATR×1 · 快进快出</div>
+        </div>
+        <div class="tf-box" id="tf1h">
+          <div class="tf-label">1小时 <span class="badge tf neutral">等待</span></div>
+          <div class="tf-sig">--</div>
+          <div class="tf-strat">波段做单 · R:R 1:2<br>止损 ATR×1.5 · 持仓4-8h</div>
+        </div>
+        <div class="tf-box" id="tf4h">
+          <div class="tf-label">4小时 <span class="badge tf neutral">等待</span></div>
+          <div class="tf-sig">--</div>
+          <div class="tf-strat">主趋势 · R:R 1:3<br>止损 ATR×2 · 持仓1-3天</div>
+        </div>
+      </div>
 
-  <!-- ── 指标详情 ── -->
-  <div class="main-grid">
-    <div>
-      <div class="card">
-        <div class="card-title">
-          <span id="chartTitle">📈 BTC/USDT · 价格 + 信号标记</span>
-          <div class="tabs" style="margin:0;">
-            <button class="tab active" onclick="showChart('price')">价格</button>
-            <button class="tab" onclick="showChart('macd')">MACD</button>
-            <button class="tab" onclick="showChart('rsi')">RSI</button>
-          </div>
-        </div>
-        <div class="chart-wrap tab-content active" id="chartPrice"><canvas id="priceChart"></canvas></div>
-        <div class="chart-wrap tab-content" id="chartMacd"><canvas id="macdChart"></canvas></div>
-        <div class="chart-wrap tab-content" id="chartRsi"><canvas id="rsiChart"></canvas></div>
+      <!-- 开单参数 -->
+      <div class="entry-grid" id="entryGrid">
+        <div class="entry-cell"><div class="ec-label">入场价</div><div class="ec-val" id="epEntry">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止损(SL)</div><div class="ec-val" id="epSL" style="color:var(--red)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止盈1(TP1)</div><div class="ec-val" id="epTP1" style="color:var(--green)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止盈2(TP2)</div><div class="ec-val" id="epTP2" style="color:var(--green)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">盈亏比</div><div class="ec-val" id="epRR">--</div></div>
       </div>
     </div>
-    <div class="filter-panel">
-      <div class="filter-card">
-        <div class="filter-header">
-          <div class="filter-name"><div class="filter-icon" style="background:rgba(57,208,214,.15);color:var(--cyan);">📐</div>DMI/ADX (14)</div>
-          <div class="filter-status status-fail" id="adxStatus">等待</div>
-        </div>
-        <div class="filter-values">
-          <div class="filter-val"><div class="filter-val-label">ADX</div><div class="filter-val-num cyan" id="adxVal">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">+DI</div><div class="filter-val-num green" id="plusDI">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">-DI</div><div class="filter-val-num red" id="minusDI">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">ATR(14)</div><div class="filter-val-num accent" id="atrVal">--</div></div>
-        </div>
-      </div>
-      <div class="filter-card">
-        <div class="filter-header">
-          <div class="filter-name"><div class="filter-icon" style="background:rgba(88,166,255,.15);color:var(--blue);">〰</div>MACD (12,26,9)</div>
-          <div class="filter-status status-fail" id="macdStatus">等待</div>
-        </div>
-        <div class="filter-values">
-          <div class="filter-val"><div class="filter-val-label">MACD</div><div class="filter-val-num blue" id="macdVal">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">Signal</div><div class="filter-val-num purple" id="signalVal">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">Histogram</div><div class="filter-val-num" id="histVal">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">零轴位置</div><div class="filter-val-num" id="zeroPos">--</div></div>
-        </div>
-      </div>
-      <div class="filter-card">
-        <div class="filter-header">
-          <div class="filter-name"><div class="filter-icon" style="background:rgba(188,140,255,.15);color:var(--purple);">📊</div>RSI (14)</div>
-          <div class="filter-status status-fail" id="rsiStatus">等待</div>
-        </div>
-        <div class="filter-values">
-          <div class="filter-val"><div class="filter-val-label">RSI</div><div class="filter-val-num purple" id="rsiVal">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">区间</div><div class="filter-val-num" id="rsiZone">--</div></div>
-          <div class="filter-val"><div class="filter-val-label">超买线</div><div class="filter-val-num red">70</div></div>
-          <div class="filter-val"><div class="filter-val-label">超卖线</div><div class="filter-val-num green">30</div></div>
-        </div>
-      </div>
-      <div class="filter-card" style="background:rgba(57,208,214,.05);border:1px solid rgba(57,208,214,.2);">
-        <div class="filter-header">
-          <div class="filter-name"><div class="filter-icon" style="background:rgba(57,208,214,.15);color:var(--cyan);">🔭</div>多周期一致性</div>
-          <div class="filter-status" id="mtfStatus" style="background:rgba(139,148,158,.1);color:var(--text2);">计算中</div>
-        </div>
-        <div id="mtfFilterDetail" style="font-size:11px;color:var(--text2);line-height:1.7;">
-          15m: 加载中... | 1H: 加载中... | 4H: 加载中...
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- ── KPI ── -->
-  <div class="section-title">📈 绩效统计</div>
-  <div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-label">总信号数</div><div class="kpi-value blue" id="kpiTotal">0</div><div class="kpi-sub">历史触发</div></div>
-    <div class="kpi-card"><div class="kpi-label">多头信号</div><div class="kpi-value green" id="kpiBull">0</div><div class="kpi-sub">做多开单</div></div>
-    <div class="kpi-card"><div class="kpi-label">空头信号</div><div class="kpi-value red" id="kpiBear">0</div><div class="kpi-sub">做空开单</div></div>
-    <div class="kpi-card"><div class="kpi-label">当前价格</div><div class="kpi-value accent" id="kpiPrice">--</div><div class="kpi-sub" id="kpiPriceSub">实时</div></div>
-    <div class="kpi-card"><div class="kpi-label">ADX 强度</div><div class="kpi-value cyan" id="kpiADX">--</div><div class="kpi-sub">趋势强度（>25强）</div></div>
-    <div class="kpi-card"><div class="kpi-label">RSI 值</div><div class="kpi-value purple" id="kpiRSI">--</div><div class="kpi-sub">当前周期</div></div>
-  </div>
-
-  <!-- ── 开单策略说明 ── -->
-  <div class="card">
-    <div class="card-title">📋 多周期开单策略说明</div>
-    <div class="tabs">
-      <button class="tab active" onclick="switchStratTab('15m')">15分钟策略</button>
-      <button class="tab" onclick="switchStratTab('1h')">1小时策略</button>
-      <button class="tab" onclick="switchStratTab('4h')">4小时策略</button>
-      <button class="tab" onclick="switchStratTab('mtf')">联合确认策略</button>
+    <!-- K线图 -->
+    <div class="chart-section">
+      <h3>📈 <span id="chartTitle">BTC/USDT</span> K线图</h3>
+      <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
     </div>
-    <div class="tab-content active" id="strat-15m">
-      <table class="rule-table">
-        <thead><tr><th>条件</th><th>参数</th><th>说明</th><th>方向</th></tr></thead>
-        <tbody>
-          <tr><td>ADX 趋势</td><td>ADX > 20</td><td>15m 趋势强度门槛低（噪音期需要降低）</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>DI 方向</td><td>+DI > -DI 或反之</td><td>15m 方向确认，快速响应</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>MACD 动量</td><td>Hist > 0 且上升</td><td>Histogram 方向向上表示做多动能</td><td><span class="tag tag-long">做多</span></td></tr>
-          <tr><td>RSI 时机</td><td>40 ≤ RSI ≤ 65</td><td>15m 区间收窄，避免极端超买超卖</td><td><span class="tag tag-long">做多</span></td></tr>
-          <tr><td>止损/止盈</td><td>SL=ATR×1.0, TP1=ATR×1.5, TP2=ATR×2.5</td><td>15m 止损收紧，快进快出</td><td><span class="tag tag-both">多空</span></td></tr>
+
+    <!-- 信号历史 -->
+    <div class="history-section">
+      <h3>📜 信号历史</h3>
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th>时间</th><th>方向</th><th>入场</th><th>SL</th><th>TP1</th>
+            <th>置信度</th><th>结果</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="7" style="text-align:center;color:#4a5568;padding:20px">等待信号...</td></tr>
         </tbody>
       </table>
-      <div style="margin-top:12px;padding:10px;background:rgba(227,179,65,.07);border-radius:8px;font-size:11px;color:var(--text2);">
-        ⚠️ <b style="color:var(--yellow)">15m 注意事项：</b>短周期噪音较多，建议仅在 1H 或 4H 同向时操作，单笔仓位控制在 0.5-1% 以内，快速止盈离场
-      </div>
-    </div>
-    <div class="tab-content" id="strat-1h">
-      <table class="rule-table">
-        <thead><tr><th>条件</th><th>参数</th><th>说明</th><th>方向</th></tr></thead>
-        <tbody>
-          <tr><td>ADX 趋势</td><td>ADX > 25</td><td>1H 标准趋势强度，过滤横盘</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>DI 方向</td><td>+DI > -DI 差值 > 3</td><td>方向差值足够才确认趋势</td><td><span class="tag tag-long">做多</span></td></tr>
-          <tr><td>MACD 动量</td><td>MACD > Signal（上穿）</td><td>1H MACD 金叉/死叉确认动量</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>RSI 时机</td><td>45 ≤ RSI ≤ 70（做多）/ 30-55（做空）</td><td>避免追高杀跌，在有利区间入场</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>止损/止盈</td><td>SL=ATR×1.5, TP1=ATR×2.5, TP2=ATR×4.5</td><td>标准日内交易参数</td><td><span class="tag tag-both">多空</span></td></tr>
-        </tbody>
-      </table>
-      <div style="margin-top:12px;padding:10px;background:rgba(63,185,80,.07);border-radius:8px;font-size:11px;color:var(--text2);">
-        ✅ <b style="color:var(--green)">1H 主要周期：</b>建议作为主要开单周期，信号质量高，每次开单 1-2% 仓位，到达TP1后移止损至成本价
-      </div>
-    </div>
-    <div class="tab-content" id="strat-4h">
-      <table class="rule-table">
-        <thead><tr><th>条件</th><th>参数</th><th>说明</th><th>方向</th></tr></thead>
-        <tbody>
-          <tr><td>ADX 趋势</td><td>ADX > 28</td><td>4H 周期要求更强的趋势确认</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>DI 方向</td><td>+DI > -DI 差值 > 5</td><td>4H 方向需更明显的分歧</td><td><span class="tag tag-long">做多</span></td></tr>
-          <tr><td>MACD 动量</td><td>MACD > Signal 且 MACD > 0</td><td>4H MACD 零轴上方做多更安全</td><td><span class="tag tag-long">做多</span></td></tr>
-          <tr><td>RSI 时机</td><td>50 ≤ RSI ≤ 72（做多）/ 28-50（做空）</td><td>4H RSI 中性偏强区间</td><td><span class="tag tag-both">多空</span></td></tr>
-          <tr><td>止损/止盈</td><td>SL=ATR×2.0, TP1=ATR×3.5, TP2=ATR×6.0</td><td>4H 持仓更长，止损更宽</td><td><span class="tag tag-both">多空</span></td></tr>
-        </tbody>
-      </table>
-      <div style="margin-top:12px;padding:10px;background:rgba(88,166,255,.07);border-radius:8px;font-size:11px;color:var(--text2);">
-        📊 <b style="color:var(--blue)">4H 中期趋势：</b>适合波段操作，持仓 1-3 天，每次开单可适当加大至 2-3% 仓位，信号质量最高但频率较低
-      </div>
-    </div>
-    <div class="tab-content" id="strat-mtf">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-        <div style="background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2);border-radius:10px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:8px;">🚀 强力做多条件</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.8;">
-            ✅ 4H 方向：做多信号<br>
-            ✅ 1H 方向：做多信号<br>
-            ✅ 15m 方向：做多信号<br>
-            → <b style="color:var(--green)">三周期共振，重仓做多（2-3%）</b><br><br>
-            ✅ 4H + 1H 做多，15m 等待<br>
-            → <b style="color:var(--green)">等15m出现做多信号后轻仓跟进（1%）</b>
-          </div>
-        </div>
-        <div style="background:rgba(248,81,73,.06);border:1px solid rgba(248,81,73,.2);border-radius:10px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:8px;">🔻 强力做空条件</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.8;">
-            ✅ 4H 方向：做空信号<br>
-            ✅ 1H 方向：做空信号<br>
-            ✅ 15m 方向：做空信号<br>
-            → <b style="color:var(--red)">三周期共振，重仓做空（2-3%）</b><br><br>
-            ✅ 4H + 1H 做空，15m 等待<br>
-            → <b style="color:var(--red)">等15m出现做空信号后轻仓跟进（1%）</b>
-          </div>
-        </div>
-        <div style="background:rgba(227,179,65,.06);border:1px solid rgba(227,179,65,.2);border-radius:10px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:8px;">⚠️ 避免开单情形</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.8;">
-            ❌ 三周期方向不一致<br>
-            ❌ 4H 是横盘/等待信号<br>
-            ❌ ADX < 20（所有周期）<br>
-            ❌ 高影响经济数据窗口<br>
-            → <b style="color:var(--yellow)">空仓等待，不要强开</b>
-          </div>
-        </div>
-        <div style="background:rgba(57,208,214,.06);border:1px solid rgba(57,208,214,.2);border-radius:10px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:8px;">💡 仓位管理建议</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.8;">
-            三周期共振信号：2-3% 仓位<br>
-            两周期对齐信号：1-1.5% 仓位<br>
-            单周期信号：0.5% 试探性<br>
-            总持仓不超过账户 10%<br>
-            → <b style="color:var(--cyan)">到 TP1 移止损至成本，让利润奔跑</b>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
-
-  <!-- Disclaimer -->
-  <div class="disclaimer">
-    <span>⚠️</span>
-    <span>本工具仅供交易研究与参考，所有信号为技术指标自动计算，不构成投资建议。加密货币市场风险极大，请严格控制仓位，设置止损。</span>
-  </div>
-
-</div><!-- /container -->
+</div>
 
 <script>
-// ══════════════════════════════════════════════════
-//  配置
-// ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════
 const COINS = {
-  BTC: { symbol: 'BTCUSDT', name: 'BTC/USDT', color: '#f7931a', icon: '₿', decimals: 2 },
-  ETH: { symbol: 'ETHUSDT', name: 'ETH/USDT', color: '#627eea', icon: 'Ξ', decimals: 2 },
-  SOL: { symbol: 'SOLUSDT', name: 'SOL/USDT', color: '#9945ff', icon: '◎', decimals: 3 },
-  BNB: { symbol: 'BNBUSDT', name: 'BNB/USDT', color: '#f3ba2f', icon: 'B', decimals: 2 },
+  BTC: { symbol:'btcusdt', display:'BTC/USDT', precision:1, color:'#F7931A' },
+  ETH: { symbol:'ethusdt', display:'ETH/USDT', precision:2, color:'#627EEA' },
+  SOL: { symbol:'solusdt', display:'SOL/USDT', precision:3, color:'#9945FF' },
+  BNB: { symbol:'bnbusdt', display:'BNB/USDT', precision:2, color:'#F3BA2F' },
 };
-const TFS = ['15m', '1h', '4h'];
-const TF_CONFIG = {
-  '15m': { slAtr: 1.0, tp1Atr: 1.5, tp2Atr: 2.5, adxMin: 20, rsiLong: [40,65], rsiShort: [35,60] },
-  '1h':  { slAtr: 1.5, tp1Atr: 2.5, tp2Atr: 4.5, adxMin: 25, rsiLong: [45,70], rsiShort: [30,55] },
-  '4h':  { slAtr: 2.0, tp1Atr: 3.5, tp2Atr: 6.0, adxMin: 28, rsiLong: [50,72], rsiShort: [28,50] },
-};
+const TFS = ['15m','1h','4h'];
+const TF_LABELS = {'15m':'15分钟','1h':'1小时','4h':'4小时'};
 const REST_BASE = 'https://fapi.binance.com';
 const WS_BASE   = 'wss://fstream.binance.com';
 
-// ══════════════════════════════════════════════════
-//  State
-// ══════════════════════════════════════════════════
+// ── State ──
 let activeCoin = 'BTC';
-let activeTF   = '1h';
-let wsConn     = null;
-let wsReconnectTimer = null;
-let wsConnected = false;
-let lastWsStreamKey = '';
-
-// 每个 coin 每个 tf 存储数据和信号
-const state = {};
-for (const coin of Object.keys(COINS)) {
-  state[coin] = {};
-  for (const tf of TFS) {
-    state[coin][tf] = { candles: [], indicators: null, signal: null, loaded: false };
-  }
-}
-
+let activeTf   = '1h';
+const coinData = {};  // coinData[coin][tf] = { klines:[], indicators:{} }
+const wsMap    = {};  // wsMap[coin][tf] = WebSocket
 const signalHistory = [];
-let charts = { price: null, macd: null, rsi: null };
 
-// ══════════════════════════════════════════════════
-//  Utils
-// ══════════════════════════════════════════════════
-function fmt(v, d) {
-  if (v === null || v === undefined || isNaN(v)) return '--';
-  return Number(v).toFixed(d ?? 2);
-}
-function fmtPrice(v, coin) {
-  const d = COINS[coin]?.decimals ?? 2;
-  return fmt(v, d);
-}
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function now() { return new Date().toLocaleTimeString('zh-CN', {hour12:false}); }
+Object.keys(COINS).forEach(c => {
+  coinData[c] = {};
+  wsMap[c] = {};
+  TFS.forEach(tf => { coinData[c][tf] = { klines:[], indicators:{} }; });
+});
 
-// ══════════════════════════════════════════════════
-//  Technical Indicators
-// ══════════════════════════════════════════════════
-function calcEMA(data, period) {
-  const k = 2 / (period + 1);
-  const ema = [];
-  let prev = null;
-  for (const v of data) {
-    if (prev === null) { ema.push(v); prev = v; }
-    else { const e = v * k + prev * (1 - k); ema.push(e); prev = e; }
-  }
-  return ema;
+// ══════════════════════════════════════════════
+//  INDICATORS
+// ══════════════════════════════════════════════
+function calcEMA(arr, p){
+  const k=2/(p+1); let ema=arr[0];
+  return arr.map((v,i)=>{ if(i===0)return ema; ema=v*k+ema*(1-k); return ema; });
 }
-function calcMACD(closes) {
-  const ema12 = calcEMA(closes, 12);
-  const ema26 = calcEMA(closes, 26);
-  const macdLine = ema12.map((v, i) => v - ema26[i]);
-  const signalLine = calcEMA(macdLine.slice(25), 9);
-  const result = [];
-  for (let i = 0; i < closes.length; i++) {
-    const si = i - 25;
-    if (si < 0) { result.push({ macd: macdLine[i], signal: null, hist: null }); continue; }
-    const sig = si < signalLine.length ? signalLine[si] : null;
-    result.push({ macd: macdLine[i], signal: sig, hist: sig !== null ? macdLine[i] - sig : null });
-  }
-  return result;
+function calcMACD(closes){
+  const ema12=calcEMA(closes,12), ema26=calcEMA(closes,26);
+  const macd=ema12.map((v,i)=>v-ema26[i]);
+  const sig=calcEMA(macd,9);
+  const hist=macd.map((v,i)=>v-sig[i]);
+  return {macd,sig,hist};
 }
-function calcRSI(closes, period = 14) {
-  const rsi = [];
-  for (let i = 0; i < closes.length; i++) {
-    if (i < period) { rsi.push(null); continue; }
-    let gains = 0, losses = 0;
-    for (let j = i - period + 1; j <= i; j++) {
-      const d = closes[j] - closes[j - 1];
-      if (d > 0) gains += d; else losses -= d;
-    }
-    const rs = losses === 0 ? 100 : gains / losses;
-    rsi.push(100 - 100 / (1 + rs));
+function calcRSI(closes,p=14){
+  let gains=0,losses=0;
+  for(let i=1;i<=p;i++){
+    const d=closes[i]-closes[i-1];
+    if(d>0)gains+=d; else losses-=d;
+  }
+  let ag=gains/p, al=losses/p;
+  const rsi=[null];
+  for(let i=1;i<p;i++)rsi.push(null);
+  rsi.push(100-100/(1+ag/Math.max(al,1e-10)));
+  for(let i=p+1;i<closes.length;i++){
+    const d=closes[i]-closes[i-1];
+    const g=d>0?d:0, l=d<0?-d:0;
+    ag=(ag*(p-1)+g)/p; al=(al*(p-1)+l)/p;
+    rsi.push(100-100/(1+ag/Math.max(al,1e-10)));
   }
   return rsi;
 }
-function calcATR(candles, period = 14) {
-  const tr = [];
-  for (let i = 1; i < candles.length; i++) {
-    const h = candles[i].high, l = candles[i].low, pc = candles[i - 1].close;
-    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
-  }
-  const atr = [];
-  for (let i = 0; i < tr.length; i++) {
-    if (i < period - 1) { atr.push(null); continue; }
-    const avg = tr.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period;
-    atr.push(avg);
-  }
-  return atr;
+function calcATR(highs,lows,closes,p=14){
+  const tr=highs.map((h,i)=>i===0?h-lows[i]:Math.max(h-lows[i],Math.abs(h-closes[i-1]),Math.abs(lows[i]-closes[i-1])));
+  let atr=tr.slice(0,p).reduce((a,b)=>a+b,0)/p;
+  const atrs=[...Array(p-1).fill(null),atr];
+  for(let i=p;i<tr.length;i++){ atr=(atr*(p-1)+tr[i])/p; atrs.push(atr); }
+  return atrs;
 }
-function calcDMI(candles, period = 14) {
-  const plusDM = [], minusDM = [], tr = [];
-  for (let i = 1; i < candles.length; i++) {
-    const h = candles[i].high, l = candles[i].low;
-    const ph = candles[i - 1].high, pl = candles[i - 1].low, pc = candles[i - 1].close;
-    const upMove   = h - ph;
-    const downMove = pl - l;
-    plusDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
-    minusDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
-    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+function calcDMI(highs,lows,closes,p=14){
+  const dmPlus=[],dmMinus=[];
+  for(let i=1;i<highs.length;i++){
+    const up=highs[i]-highs[i-1], dn=lows[i-1]-lows[i];
+    dmPlus.push(up>dn&&up>0?up:0);
+    dmMinus.push(dn>up&&dn>0?dn:0);
   }
-  const smTR = calcWilderSmooth(tr, period);
-  const smPDM = calcWilderSmooth(plusDM, period);
-  const smMDM = calcWilderSmooth(minusDM, period);
-  const plusDI  = smPDM.map((v, i) => smTR[i] ? (v / smTR[i]) * 100 : 0);
-  const minusDI = smMDM.map((v, i) => smTR[i] ? (v / smTR[i]) * 100 : 0);
-  const dx = plusDI.map((v, i) => {
-    const s = v + minusDI[i]; return s ? Math.abs(v - minusDI[i]) / s * 100 : 0;
-  });
-  const adx = calcWilderSmooth(dx, period);
-  return { plusDI, minusDI, adx };
-}
-function calcWilderSmooth(data, period) {
-  const result = [];
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (i < period) { sum += data[i]; if (i === period - 1) result.push(sum); else result.push(null); continue; }
-    const prev = result[result.length - 1];
-    result.push(prev !== null ? (prev * (period - 1) + data[i]) / period : null);
+  const atr=calcATR(highs.slice(1),lows.slice(1),closes.slice(1),p);
+  let sp=dmPlus.slice(0,p).reduce((a,b)=>a+b,0);
+  let sm=dmMinus.slice(0,p).reduce((a,b)=>a+b,0);
+  const diP=[...Array(p).fill(null)], diM=[...Array(p).fill(null)], adx=[...Array(p*2-1).fill(null)];
+  diP.push(atr[p-1]?100*sp/atr[p-1]:0);
+  diM.push(atr[p-1]?100*sm/atr[p-1]:0);
+  for(let i=p;i<dmPlus.length;i++){
+    sp=sp-sp/p+dmPlus[i]; sm=sm-sm/p+dmMinus[i];
+    diP.push(atr[i]?100*sp/atr[i]:0);
+    diM.push(atr[i]?100*sm/atr[i]:0);
   }
-  return result;
+  let adxVal=0; let adxStart=p;
+  for(let i=p;i<diP.length-p+1;i++){
+    const dx=diP[i]&&diM[i]?100*Math.abs(diP[i]-diM[i])/(diP[i]+diM[i]):0;
+    if(i<p*2-1){ adxVal+=dx; }
+    else{ if(i===p*2-1){ adxVal=(adxVal+dx)/p; adx.push(adxVal); }
+          else{ adxVal=(adxVal*(p-1)+dx)/p; adx.push(adxVal); } }
+  }
+  return {diP,diM,adx};
 }
-function calcIndicators(candles) {
-  if (candles.length < 60) return null;
-  const closes = candles.map(c => c.close);
-  const macdArr = calcMACD(closes);
-  const rsiArr  = calcRSI(closes, 14);
-  const dmi     = calcDMI(candles, 14);
-  const atrArr  = calcATR(candles, 14);
-  const last = candles.length - 1;
-  const di_len = dmi.adx.length;
-  const di_offset = last - di_len;  // candles 比 dmi 多 1
 
+function calcIndicators(klines){
+  if(klines.length<50)return null;
+  const closes=klines.map(k=>k.c);
+  const highs =klines.map(k=>k.h);
+  const lows  =klines.map(k=>k.l);
+  const {macd,sig,hist}=calcMACD(closes);
+  const rsi=calcRSI(closes);
+  const atr=calcATR(highs,lows,closes);
+  const {diP,diM,adx}=calcDMI(highs,lows,closes);
+  const n=closes.length-1;
   return {
-    macd:     macdArr[last]?.macd ?? null,
-    signal:   macdArr[last]?.signal ?? null,
-    hist:     macdArr[last]?.hist ?? null,
-    rsi:      rsiArr[last],
-    adx:      di_len > 0 ? dmi.adx[di_len - 1] : null,
-    plusDI:   di_len > 0 ? dmi.plusDI[di_len - 1] : null,
-    minusDI:  di_len > 0 ? dmi.minusDI[di_len - 1] : null,
-    atr:      atrArr.length > 0 ? atrArr[atrArr.length - 1] : null,
-    // history for charts
-    macdHistory: macdArr.slice(-80),
-    rsiHistory:  rsiArr.slice(-80),
+    close:closes[n], atr:atr[n]||0,
+    macd:macd[n], macdSig:sig[n], macdHist:hist[n],
+    prevMacdHist:hist[n-1],
+    rsi:rsi[n]||50,
+    diP:diP[n]||0, diM:diM[n]||0, adx:adx[n]||0,
+    macdHistArr:hist, rsiArr:rsi, adxArr:adx
   };
 }
 
-// ══════════════════════════════════════════════════
-//  Signal Logic
-// ══════════════════════════════════════════════════
-function evalSignal(ind, tf) {
-  if (!ind) return { dir: 'none', conf: 0, filters: {} };
-  const cfg = TF_CONFIG[tf];
-  const { adx, plusDI, minusDI, macd, signal: sig, hist, rsi } = ind;
+// ══════════════════════════════════════════════
+//  SIGNAL ENGINE
+// ══════════════════════════════════════════════
+function getSignal(ind, tf){
+  if(!ind) return {dir:'wait',confidence:0,filters:{},entry:0,sl:0,tp1:0,tp2:0,rr:'--'};
+  const {close,atr,macd,macdSig,macdHist,prevMacdHist,rsi,diP,diM,adx}=ind;
+  const atrSafe=atr||close*0.002;
 
-  const f_adx   = adx !== null && adx > cfg.adxMin;
-  const f_di_l  = plusDI !== null && minusDI !== null && plusDI > minusDI;
-  const f_di_s  = plusDI !== null && minusDI !== null && minusDI > plusDI;
-  const f_macd_l= hist !== null && hist > 0 && (macd !== null && macd > (sig ?? 0));
-  const f_macd_s= hist !== null && hist < 0 && (macd !== null && macd < (sig ?? 0));
-  const f_rsi_l = rsi !== null && rsi >= cfg.rsiLong[0] && rsi <= cfg.rsiLong[1];
-  const f_rsi_s = rsi !== null && rsi >= cfg.rsiShort[0] && rsi <= cfg.rsiShort[1];
-  const f_zero_l= macd !== null && macd > 0;
-  const f_zero_s= macd !== null && macd < 0;
+  // 过滤条件
+  const f1_adx   = adx>20;                        // ADX趋势强度
+  const f2_diDir = diP!==diM;                      // DI方向
+  const f3_macd  = macdHist>0!==prevMacdHist>0;   // MACD金叉/死叉
+  const f4_rsi_l = rsi>45&&rsi<70;                 // RSI多头区间
+  const f4_rsi_s = rsi<55&&rsi>30;                 // RSI空头区间
+  const f5_zero  = (macd>0&&diP>diM)||(macd<0&&diM>diP); // 零轴同侧
 
-  const bullScore = [f_adx, f_di_l, f_macd_l, f_rsi_l, f_zero_l].filter(Boolean).length;
-  const bearScore = [f_adx, f_di_s, f_macd_s, f_rsi_s, f_zero_s].filter(Boolean).length;
+  // 做多
+  const longFilters = [f1_adx, diP>diM, macdHist>0&&macdHist>prevMacdHist, f4_rsi_l, macd>0];
+  const shortFilters= [f1_adx, diM>diP, macdHist<0&&macdHist<prevMacdHist, f4_rsi_s, macd<0];
 
-  let dir = 'wait';
-  if (bullScore >= 4) dir = 'bull';
-  else if (bearScore >= 4) dir = 'bear';
-  else if (bullScore <= 1 && bearScore <= 1) dir = 'noentry';
+  const longScore = longFilters.filter(Boolean).length;
+  const shortScore= shortFilters.filter(Boolean).length;
 
-  const conf = Math.round(Math.max(bullScore, bearScore) / 5 * 100);
-  return {
-    dir, conf,
-    filters: {
-      adx:  f_adx,
-      di:   dir === 'bull' ? f_di_l : f_di_s,
-      macd: dir === 'bull' ? f_macd_l : f_macd_s,
-      rsi:  dir === 'bull' ? f_rsi_l : f_rsi_s,
-      zero: dir === 'bull' ? f_zero_l : f_zero_s,
-    }
-  };
-}
+  // 不同周期 SL 倍数
+  const slMult  = tf==='15m'?1.0 : tf==='1h'?1.5 : 2.0;
+  const tp1Mult = tf==='15m'?1.5 : tf==='1h'?2.5 : 3.5;
+  const tp2Mult = tf==='15m'?2.5 : tf==='1h'?4.0 : 6.0;
 
-function calcOrderParams(ind, tf, price, dir) {
-  if (!ind || !ind.atr || dir === 'wait' || dir === 'noentry' || dir === 'none') return null;
-  const cfg = TF_CONFIG[tf];
-  const atr = ind.atr;
-  if (dir === 'bull') {
-    return {
-      entry: price,
-      sl:    price - atr * cfg.slAtr,
-      tp1:   price + atr * cfg.tp1Atr,
-      tp2:   price + atr * cfg.tp2Atr,
-      rr:    cfg.tp1Atr / cfg.slAtr,
-    };
+  let dir='wait', confidence=0, sl=0, tp1=0, tp2=0;
+  if(longScore>=4 && longScore>shortScore){
+    dir='long'; confidence=Math.round(50+longScore*9);
+    sl  =+(close-atrSafe*slMult).toFixed(2);
+    tp1 =+(close+atrSafe*tp1Mult).toFixed(2);
+    tp2 =+(close+atrSafe*tp2Mult).toFixed(2);
+  } else if(shortScore>=4 && shortScore>longScore){
+    dir='short'; confidence=Math.round(50+shortScore*9);
+    sl  =+(close+atrSafe*slMult).toFixed(2);
+    tp1 =+(close-atrSafe*tp1Mult).toFixed(2);
+    tp2 =+(close-atrSafe*tp2Mult).toFixed(2);
   } else {
-    return {
-      entry: price,
-      sl:    price + atr * cfg.slAtr,
-      tp1:   price - atr * cfg.tp1Atr,
-      tp2:   price - atr * cfg.tp2Atr,
-      rr:    cfg.tp1Atr / cfg.slAtr,
-    };
+    dir='wait'; confidence=Math.max(longScore,shortScore)*12;
   }
+  const risk=Math.abs(close-sl)||1;
+  const rr=tp1?(Math.abs(tp1-close)/risk).toFixed(1)+'R':'--';
+  return {dir,confidence,entry:close,sl,tp1,tp2,rr,
+    filters:{adx:f1_adx, diDir:f2_diDir, macd:macdHist*prevMacdHist<0,
+             rsi:f4_rsi_l||f4_rsi_s, zero:f5_zero}};
 }
 
-// ══════════════════════════════════════════════════
-//  Binance REST – fetch klines
-// ══════════════════════════════════════════════════
-async function fetchKlines(symbol, interval, limit = 200) {
-  const url = `${REST_BASE}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const raw = await res.json();
-  return raw.map(k => ({
-    time:  k[0],
-    open:  parseFloat(k[1]),
-    high:  parseFloat(k[2]),
-    low:   parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    vol:   parseFloat(k[5]),
-  }));
+// ══════════════════════════════════════════════
+//  REST  历史K线
+// ══════════════════════════════════════════════
+async function fetchKlines(coin, tf, limit=200){
+  const sym=COINS[coin].symbol.toUpperCase();
+  const url=`${REST_BASE}/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
+  try{
+    const r=await fetch(url);
+    if(!r.ok)throw new Error(r.status);
+    const raw=await r.json();
+    coinData[coin][tf].klines=raw.map(k=>({
+      t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]
+    }));
+    coinData[coin][tf].indicators=calcIndicators(coinData[coin][tf].klines);
+    return true;
+  }catch(e){ console.warn('REST fail',coin,tf,e); return false; }
 }
 
-// ══════════════════════════════════════════════════
-//  WebSocket – active coin + active TF
-// ══════════════════════════════════════════════════
-function connectWS(coin, tf) {
-  const sym = COINS[coin].symbol.toLowerCase();
-  const streamKey = `${sym}@kline_${tf}`;
-  if (wsConn && lastWsStreamKey === streamKey && wsConnected) return;
+// ══════════════════════════════════════════════
+//  WebSocket 实时推送
+// ══════════════════════════════════════════════
+function connectWS(coin, tf){
+  if(wsMap[coin][tf]){ try{wsMap[coin][tf].close();}catch(e){} }
+  const sym=COINS[coin].symbol;
+  const url=`${WS_BASE}/ws/${sym}@kline_${tf}`;
+  const ws=new WebSocket(url);
+  wsMap[coin][tf]=ws;
 
-  if (wsConn) { try { wsConn.close(); } catch(e){} wsConn = null; }
-  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
-
-  lastWsStreamKey = streamKey;
-  setWsStatus('connecting');
-  const url = `${WS_BASE}/ws/${streamKey}`;
-  wsConn = new WebSocket(url);
-
-  wsConn.onopen = () => {
-    wsConnected = true;
-    setWsStatus('connected');
+  ws.onopen=()=>{ setConnStatus('ok'); };
+  ws.onmessage=e=>{
+    try{
+      const d=JSON.parse(e.data).k;
+      if(!d)return;
+      const kl={t:d.t,o:+d.o,h:+d.h,l:+d.l,c:+d.c,v:+d.v};
+      const arr=coinData[coin][tf].klines;
+      if(arr.length&&arr[arr.length-1].t===kl.t) arr[arr.length-1]=kl;
+      else arr.push(kl);
+      if(arr.length>500)arr.shift();
+      coinData[coin][tf].indicators=calcIndicators(arr);
+      if(coin===activeCoin) renderAll();
+      updateSidebarCoin(coin);
+    }catch(ex){}
   };
-  wsConn.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.e !== 'kline') return;
-    const k = msg.k;
-    const candle = {
-      time:  k.t,
-      open:  parseFloat(k.o),
-      high:  parseFloat(k.h),
-      low:   parseFloat(k.l),
-      close: parseFloat(k.c),
-      vol:   parseFloat(k.v),
-    };
-    // Update candles
-    const st = state[coin][tf];
-    if (st.candles.length > 0) {
-      const last = st.candles[st.candles.length - 1];
-      if (last.time === candle.time) st.candles[st.candles.length - 1] = candle;
-      else st.candles.push(candle);
-      if (st.candles.length > 300) st.candles.shift();
-    }
-    st.indicators = calcIndicators(st.candles);
-    const sig = evalSignal(st.indicators, tf);
-    st.signal = sig;
-
-    // Update header price if active
-    if (coin === activeCoin) {
-      const price = candle.close;
-      updateHeaderPrice(coin, price);
-      document.getElementById('wsLastUpdate').textContent = `最后更新: ${now()}`;
-      if (tf === activeTF) {
-        refreshMainSignal();
-        refreshMTFCards();
-      } else {
-        refreshMTFCards();
-      }
-      updateOverviewCard(coin);
-    }
+  ws.onclose=()=>{
+    setConnStatus('ng');
+    setTimeout(()=>connectWS(coin,tf),5000);
   };
-  wsConn.onerror = () => setWsStatus('error');
-  wsConn.onclose = () => {
-    wsConnected = false;
-    setWsStatus('error');
-    wsReconnectTimer = setTimeout(() => connectWS(coin, tf), 5000);
-  };
+  ws.onerror=()=>ws.close();
 }
 
-// ══════════════════════════════════════════════════
-//  Init – load all coins all TFs
-// ══════════════════════════════════════════════════
-async function init() {
-  buildCoinNav();
-  buildOverviewGrid();
-
-  let loaded = 0;
-  const total = Object.keys(COINS).length * TFS.length;
-
-  for (const coin of Object.keys(COINS)) {
-    for (const tf of TFS) {
-      try {
-        document.getElementById('loadingMsg').textContent = `加载 ${coin}/USDT ${tf} K线...`;
-        const candles = await fetchKlines(COINS[coin].symbol, tf, 200);
-        state[coin][tf].candles = candles;
-        state[coin][tf].indicators = calcIndicators(candles);
-        state[coin][tf].signal = evalSignal(state[coin][tf].indicators, tf);
-        state[coin][tf].loaded = true;
-        loaded++;
-        updateOverviewCard(coin);
-        // slight delay to avoid rate limit
-        await sleep(80);
-      } catch(err) {
-        console.warn(`Failed to load ${coin} ${tf}:`, err);
-        loaded++;
-      }
-    }
-  }
-
-  document.getElementById('loadingOverlay').style.display = 'none';
-
-  // Render main view
-  renderMainView();
-  refreshMTFCards();
-  buildCharts();
-  connectWS(activeCoin, activeTF);
-
-  // Clock
-  setInterval(() => {
-    document.getElementById('clockDisplay').textContent = now();
-  }, 1000);
-
-  // Recalc all every 30s (for coins not actively WS'd)
-  setInterval(refreshAll, 30000);
+// ══════════════════════════════════════════════
+//  UI 渲染
+// ══════════════════════════════════════════════
+// 连接状态
+function setConnStatus(s){
+  const dot=document.getElementById('connDot');
+  const txt=document.getElementById('connText');
+  dot.className='conn-dot '+s;
+  txt.textContent=s==='ok'?'已连接':s==='ng'?'断线重连中...':'连接中...';
 }
 
-async function refreshAll() {
-  for (const coin of Object.keys(COINS)) {
-    for (const tf of TFS) {
-      try {
-        const candles = await fetchKlines(COINS[coin].symbol, tf, 200);
-        state[coin][tf].candles = candles;
-        state[coin][tf].indicators = calcIndicators(candles);
-        state[coin][tf].signal = evalSignal(state[coin][tf].indicators, tf);
-        state[coin][tf].loaded = true;
-        updateOverviewCard(coin);
-        await sleep(60);
-      } catch(e) {}
-    }
-  }
-  renderMainView();
-  refreshMTFCards();
+// 置信度环
+let confChart=null;
+function drawConfRing(pct,dir){
+  const canvas=document.getElementById('confCanvas');
+  const ctx=canvas.getContext('2d');
+  const w=80,r=34,cx=40,cy=40;
+  ctx.clearRect(0,0,w,w);
+  // 背景圆
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle='#1e2a3a';ctx.lineWidth=8;ctx.stroke();
+  // 进度
+  const color=dir==='long'?'#00c853':dir==='short'?'#ff3d57':'#ffd600';
+  const end=(pct/100)*Math.PI*2-Math.PI/2;
+  ctx.beginPath();ctx.arc(cx,cy,r,-Math.PI/2,end);
+  ctx.strokeStyle=color;ctx.lineWidth=8;ctx.lineCap='round';ctx.stroke();
+  document.getElementById('confPct').textContent=pct+'%';
+  document.getElementById('confPct').style.color=color;
 }
 
-// ══════════════════════════════════════════════════
-//  UI Build
-// ══════════════════════════════════════════════════
-function buildCoinNav() {
-  const nav = document.getElementById('coinNav');
-  nav.innerHTML = '';
-  for (const [key, cfg] of Object.entries(COINS)) {
-    const btn = document.createElement('div');
-    btn.className = 'coin-btn' + (key === activeCoin ? ' active' : '');
-    btn.id = `coinBtn-${key}`;
-    btn.innerHTML = `
-      <div class="coin-icon" style="background:${cfg.color}22;color:${cfg.color}">${cfg.icon}</div>
-      <div>
-        <div>${cfg.name}</div>
-        <div class="coin-price" id="coinPrice-${key}" style="color:${cfg.color}">--</div>
-        <div class="coin-signal sig-none" id="coinSig-${key}">--</div>
-      </div>`;
-    btn.onclick = () => switchCoin(key);
-    nav.appendChild(btn);
-  }
-}
+// 方向文字
+function dirText(d){ return d==='long'?'做多信号':d==='short'?'做空信号':'等待信号'; }
+function dirArrow(d){ return d==='long'?'▲':d==='short'?'▽':'⏸'; }
+function dirColor(d){ return d==='long'?'var(--green)':d==='short'?'var(--red)':'var(--yellow)'; }
+function dirClass(d){ return d==='long'?'long':d==='short'?'short':'wait'; }
 
-function buildOverviewGrid() {
-  const grid = document.getElementById('overviewGrid');
-  grid.innerHTML = '';
-  for (const [key, cfg] of Object.entries(COINS)) {
-    const card = document.createElement('div');
-    card.className = 'overview-card' + (key === activeCoin ? ' active' : '');
-    card.id = `ov-${key}`;
-    card.innerHTML = `
-      <div class="ov-top">
-        <div class="ov-symbol" style="color:${cfg.color}">${cfg.icon} ${key}/USDT</div>
-        <div>
-          <div class="ov-price" id="ov-price-${key}">--</div>
-          <div class="ov-chg" id="ov-chg-${key}">--</div>
-        </div>
+// 渲染三周期确认
+function renderTfConfirm(){
+  const sigMap={};
+  TFS.forEach(tf=>{
+    const ind=coinData[activeCoin][tf].indicators;
+    sigMap[tf]=ind?getSignal(ind,tf):{dir:'wait',confidence:0};
+  });
+
+  // 主信号：以 1h 为主，4h 为趋势参考
+  const main=sigMap[activeTf]||sigMap['1h'];
+  const hero=document.getElementById('signalHero');
+  hero.className='signal-hero '+dirClass(main.dir);
+  document.getElementById('heroArrow').textContent=dirArrow(main.dir);
+  document.getElementById('heroText').style.color=dirColor(main.dir);
+  document.getElementById('heroText').textContent=dirText(main.dir);
+  document.getElementById('heroMeta').textContent=
+    `${COINS[activeCoin].display} · ${TF_LABELS[activeTf]} · ${new Date().toLocaleTimeString()}`;
+  drawConfRing(main.confidence,main.dir);
+
+  // 过滤 badges
+  const fRow=document.getElementById('filterRow');
+  const labels=['ADX趋势','DI方向','MACD金叉','RSI时机','零轴同侧'];
+  const keys=['adx','diDir','macd','rsi','zero'];
+  fRow.innerHTML=keys.map((k,i)=>{
+    const ok=main.filters&&main.filters[k];
+    return `<span class="badge ${ok?'long':'neutral'}">${ok?'✓':'✗'} ${labels[i]}</span>`;
+  }).join('');
+
+  // 三周期盒子
+  ['15m','1h','4h'].forEach(tf=>{
+    const sig=sigMap[tf];
+    const box=document.getElementById('tf'+tf.replace('m','m').replace('h','h'));
+    if(!box)return;
+    box.className='tf-box '+dirClass(sig.dir);
+    const strats={'15m':'短线做单 · R:R 1:1.5<br>止损 ATR×1 · 快进快出',
+                  '1h': '波段做单 · R:R 1:2<br>止损 ATR×1.5 · 持仓4-8h',
+                  '4h': '主趋势 · R:R 1:3<br>止损 ATR×2 · 持仓1-3天'};
+    box.innerHTML=`
+      <div class="tf-label">${TF_LABELS[tf]}
+        <span class="badge tf ${dirClass(sig.dir)}">${dirArrow(sig.dir)} ${dirText(sig.dir).slice(0,2)}</span>
       </div>
-      <div id="ov-main-sig-${key}" style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px;">-- 等待数据</div>
-      <div class="ov-tfs" id="ov-tfs-${key}">
-        <span class="ov-tf-dot ov-tf-none">15m --</span>
-        <span class="ov-tf-dot ov-tf-none">1H --</span>
-        <span class="ov-tf-dot ov-tf-none">4H --</span>
+      <div class="tf-sig" style="color:${dirColor(sig.dir)}">${dirText(sig.dir)}</div>
+      <div class="tf-strat">${strats[tf]}</div>
+    `;
+  });
+
+  // 开单参数
+  const p=COINS[activeCoin].precision;
+  document.getElementById('epEntry').textContent=main.entry?main.entry.toFixed(p):'--';
+  document.getElementById('epSL').textContent   =main.sl?main.sl.toFixed(p):'--';
+  document.getElementById('epTP1').textContent  =main.tp1?main.tp1.toFixed(p):'--';
+  document.getElementById('epTP2').textContent  =main.tp2?main.tp2.toFixed(p):'--';
+  document.getElementById('epRR').textContent   =main.rr||'--';
+
+  // 信号历史
+  maybeAddHistory(activeCoin,activeTf,main);
+}
+
+// ── K线图 ─────────────────────────────────────
+let priceChart=null;
+function renderChart(){
+  const klines=coinData[activeCoin][activeTf].klines;
+  if(!klines.length)return;
+  const labels=klines.slice(-80).map(k=>new Date(k.t).toLocaleTimeString('zh',{hour:'2-digit',minute:'2-digit'}));
+  const closes=klines.slice(-80).map(k=>k.c);
+  const ctx=document.getElementById('priceChart').getContext('2d');
+  if(priceChart)priceChart.destroy();
+  priceChart=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{
+      label:'收盘价',data:closes,
+      borderColor:COINS[activeCoin].color,borderWidth:1.5,
+      pointRadius:0,fill:false,tension:.3
+    }]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#4a5568',maxTicksLimit:10},grid:{color:'rgba(255,255,255,.03)'}},
+        y:{ticks:{color:'#4a5568'},grid:{color:'rgba(255,255,255,.05)'}}
+      }
+    }
+  });
+  document.getElementById('chartTitle').textContent=
+    `${COINS[activeCoin].display} · ${TF_LABELS[activeTf]}`;
+}
+
+function renderAll(){
+  renderTfConfirm();
+  renderChart();
+  document.getElementById('lastUpdateTime').textContent=new Date().toLocaleTimeString();
+}
+
+// ── 侧边栏 ────────────────────────────────────
+function updateSidebarCoin(coin){
+  const el=document.getElementById('sidebar-'+coin);
+  if(!el)return;
+  const ind=coinData[coin]['1h'].indicators;
+  const price=ind?ind.close:0;
+  const sig15=coinData[coin]['15m'].indicators?getSignal(coinData[coin]['15m'].indicators,'15m'):{dir:'wait'};
+  const sig1h =ind?getSignal(ind,'1h'):{dir:'wait'};
+  const sig4h =coinData[coin]['4h'].indicators?getSignal(coinData[coin]['4h'].indicators,'4h'):{dir:'wait'};
+  const p=COINS[coin].precision;
+  el.querySelector('.price').textContent=price?price.toFixed(p):'--';
+  el.querySelector('.sig-badges').innerHTML=
+    ['15m','1h','4h'].map((tf,i)=>{
+      const d=[sig15,sig1h,sig4h][i].dir;
+      return `<span class="badge ${dirClass(d)} tf">${tf} ${dirArrow(d)}</span>`;
+    }).join('');
+}
+
+function buildSidebar(){
+  const sb=document.getElementById('sidebar');
+  const div=document.createElement('div');
+  Object.keys(COINS).forEach(coin=>{
+    div.innerHTML=`
+      <div class="coin-card${coin===activeCoin?' active':''}" id="sidebar-${coin}"
+           onclick="selectCoin('${coin}')">
+        <div class="name" style="color:${COINS[coin].color}">${coin}</div>
+        <div class="price">--</div>
+        <div class="chg" id="chg-${coin}"></div>
+        <div class="sig-badges"></div>
       </div>`;
-    card.onclick = () => switchCoin(key);
-    grid.appendChild(card);
-  }
-}
-
-function updateOverviewCard(coin) {
-  const cfg = COINS[coin];
-  const tfsEl = document.getElementById(`ov-tfs-${coin}`);
-  if (!tfsEl) return;
-
-  // TF dots
-  const tfLabels = TFS.map(tf => {
-    const sig = state[coin][tf].signal;
-    if (!sig) return `<span class="ov-tf-dot ov-tf-none">${tf} --</span>`;
-    let cls = 'ov-tf-none', label = '--';
-    if (sig.dir === 'bull') { cls = 'ov-tf-bull'; label = '做多'; }
-    else if (sig.dir === 'bear') { cls = 'ov-tf-bear'; label = '做空'; }
-    else if (sig.dir === 'wait') { cls = 'ov-tf-wait'; label = '等待'; }
-    else { cls = 'ov-tf-none'; label = '横盘'; }
-    return `<span class="ov-tf-dot ${cls}">${tf} ${label}</span>`;
+    sb.appendChild(div.firstElementChild);
   });
-  tfsEl.innerHTML = tfLabels.join('');
-
-  // main signal (from 1h)
-  const sig1h = state[coin]['1h'].signal;
-  const mainEl = document.getElementById(`ov-main-sig-${coin}`);
-  if (mainEl && sig1h) {
-    const map = { bull: ['做多', 'var(--green)'], bear: ['做空', 'var(--red)'], wait: ['等待', 'var(--yellow)'], noentry: ['横盘', 'var(--text2)'], none: ['--', 'var(--text2)'] };
-    const [txt, col] = map[sig1h.dir] || ['--', 'var(--text2)'];
-    mainEl.textContent = `1H: ${txt}`;
-    mainEl.style.color = col;
-  }
-
-  // price (from candles)
-  const candles = state[coin]['1h'].candles;
-  if (candles.length > 0) {
-    const price = candles[candles.length - 1].close;
-    const open  = candles[candles.length - 1].open;
-    const chg   = (price - open) / open * 100;
-    const priceEl = document.getElementById(`ov-price-${coin}`);
-    const chgEl   = document.getElementById(`ov-chg-${coin}`);
-    if (priceEl) { priceEl.textContent = fmtPrice(price, coin); priceEl.style.color = cfg.color; }
-    if (chgEl)   { chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`; chgEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)'; }
-
-    // coin nav
-    document.getElementById(`coinPrice-${coin}`).textContent = fmtPrice(price, coin);
-  }
-
-  // coin signal badge in nav
-  const sig = state[coin][activeTF].signal;
-  const sigEl = document.getElementById(`coinSig-${coin}`);
-  if (sigEl && sig) {
-    const map = { bull: ['做多 ▲', 'sig-bull'], bear: ['做空 ▼', 'sig-bear'], wait: ['等待', 'sig-wait'], noentry: ['横盘', 'sig-none'], none: ['--', 'sig-none'] };
-    const [txt, cls] = map[sig.dir] || ['--', 'sig-none'];
-    sigEl.textContent = txt;
-    sigEl.className = `coin-signal ${cls}`;
-  }
-
-  // overview card class
-  const card = document.getElementById(`ov-${coin}`);
-  if (card && sig1h) {
-    card.className = 'overview-card' + (coin === activeCoin ? ' active' : '') + (sig1h.dir === 'bull' ? ' ov-bull' : sig1h.dir === 'bear' ? ' ov-bear' : '');
-  }
 }
 
-function updateHeaderPrice(coin, price) {
-  const candles = state[coin][activeTF].candles;
-  const open = candles.length > 0 ? candles[candles.length - 1].open : price;
-  const chg = (price - open) / open * 100;
-  document.getElementById('headerPrice').textContent = fmtPrice(price, coin);
-  const chgEl = document.getElementById('headerChange');
-  chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
-  chgEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('kpiPrice').textContent = fmtPrice(price, coin);
+function selectCoin(coin){
+  activeCoin=coin;
+  document.querySelectorAll('.coin-card').forEach(el=>el.classList.remove('active'));
+  const el=document.getElementById('sidebar-'+coin);
+  if(el)el.classList.add('active');
+  renderAll();
 }
 
-// ══════════════════════════════════════════════════
-//  Render main signal view
-// ══════════════════════════════════════════════════
-function renderMainView() {
-  const st = state[activeCoin][activeTF];
-  if (!st.loaded || !st.indicators) return;
-  const ind = st.indicators;
-  const sig = st.signal || evalSignal(ind, activeTF);
-  const candles = st.candles;
-  const price = candles.length > 0 ? candles[candles.length - 1].close : 0;
-
-  // Title
-  document.getElementById('signalLabel').textContent = `${COINS[activeCoin].name} · ${activeTF.toUpperCase()} · 三重过滤信号`;
-  document.getElementById('headerSymbol').textContent = COINS[activeCoin].name;
-
-  // Signal card
-  const card = document.getElementById('signalAlertCard');
-  card.className = `signal-alert-card ${sig.dir === 'none' ? 'noentry' : sig.dir}`;
-
-  const iconMap = { bull: '▲', bear: '▼', wait: '⌛', noentry: '◼', none: '◼' };
-  const titleMap = { bull: '做多信号', bear: '做空信号', wait: '等待确认', noentry: '横盘观望', none: '等待数据' };
-  const subMap   = {
-    bull: `三重过滤全部通过 · 建议做多 ${COINS[activeCoin].name} · ${activeTF.toUpperCase()} 周期`,
-    bear: `三重过滤全部通过 · 建议做空 ${COINS[activeCoin].name} · ${activeTF.toUpperCase()} 周期`,
-    wait: `部分过滤通过，尚未达到开单条件 · 继续观察`,
-    noentry: `趋势不明，建议空仓等待 · 三重过滤均未通过`,
-    none: `数据加载中...`,
-  };
-
-  document.getElementById('dirIcon').textContent  = iconMap[sig.dir] || '◼';
-  document.getElementById('dirTitle').textContent = titleMap[sig.dir] || '--';
-  document.getElementById('dirSub').textContent   = subMap[sig.dir] || '';
-
-  // Conf ring
-  const pct = sig.conf;
-  const circumference = 194.8;
-  const offset = circumference - (pct / 100) * circumference;
-  const ringEl = document.getElementById('confRingFill');
-  const colMap = { bull: 'var(--green)', bear: 'var(--red)', wait: 'var(--yellow)', noentry: 'var(--text2)', none: 'var(--text2)' };
-  ringEl.style.strokeDashoffset = offset;
-  ringEl.style.stroke = colMap[sig.dir] || 'var(--cyan)';
-  document.getElementById('confPct').textContent = `${pct}%`;
-  document.getElementById('confPct').style.color = colMap[sig.dir] || 'var(--cyan)';
-
-  // Order params
-  const op = calcOrderParams(ind, activeTF, price, sig.dir);
-  if (op) {
-    const d = COINS[activeCoin].decimals;
-    document.getElementById('entryPrice').textContent = fmt(op.entry, d);
-    document.getElementById('slPrice').textContent    = fmt(op.sl, d);
-    document.getElementById('tp1Price').textContent   = fmt(op.tp1, d);
-    document.getElementById('tp2Price').textContent   = fmt(op.tp2, d);
-    document.getElementById('rrVal').textContent      = `1 : ${op.rr.toFixed(1)}`;
-    const cfg = TF_CONFIG[activeTF];
-    document.getElementById('slNote').textContent  = `ATR×${cfg.slAtr} 动态止损`;
-    document.getElementById('tp1Note').textContent = `ATR×${cfg.tp1Atr} · 减仓50%`;
-    document.getElementById('tp2Note').textContent = `ATR×${cfg.tp2Atr} · 全仓平`;
-    document.getElementById('entryNote').textContent= `当前市价 ${now()}`;
-  } else {
-    ['entryPrice','slPrice','tp1Price','tp2Price','rrVal'].forEach(id => document.getElementById(id).textContent = '--');
-  }
-
-  // Filter badges
-  const { filters } = sig;
-  const badgeData = [
-    ['fb-adx',  filters.adx,  `ADX ${ind.adx ? ind.adx.toFixed(1) : '--'}`],
-    ['fb-di',   filters.di,   `DI ${ind.plusDI ? ind.plusDI.toFixed(1) : '--'} vs ${ind.minusDI ? ind.minusDI.toFixed(1) : '--'}`],
-    ['fb-macd', filters.macd, `MACD ${ind.hist ? (ind.hist > 0 ? '+' : '') + ind.hist.toFixed(2) : '--'}`],
-    ['fb-rsi',  filters.rsi,  `RSI ${ind.rsi ? ind.rsi.toFixed(1) : '--'}`],
-    ['fb-zero', filters.zero, `零轴${ind.macd > 0 ? '上方' : '下方'} ${ind.macd ? ind.macd.toFixed(2) : '--'}`],
-  ];
-  badgeData.forEach(([id, pass, label]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.className = `filter-badge ${pass ? 'fb-pass' : 'fb-fail'}`;
-    el.textContent = (pass ? '✓ ' : '✗ ') + label;
+// ── 信号历史 ──────────────────────────────────
+let lastSignalKey='';
+function maybeAddHistory(coin,tf,sig){
+  if(sig.dir==='wait')return;
+  const key=`${coin}|${tf}|${sig.dir}|${sig.entry}`;
+  if(key===lastSignalKey)return;
+  lastSignalKey=key;
+  signalHistory.unshift({
+    time:new Date().toLocaleTimeString(),coin,tf,
+    dir:sig.dir,entry:sig.entry,sl:sig.sl,tp1:sig.tp1,
+    conf:sig.confidence
   });
-
-  // MTF consistency badge
-  const mtfResult = getMTFConsistency();
-  const mtfBadge = document.getElementById('fb-mtf');
-  if (mtfBadge) {
-    mtfBadge.className = `filter-badge ${mtfResult.pass ? 'fb-pass' : 'fb-warn'}`;
-    mtfBadge.textContent = (mtfResult.pass ? '✓ ' : '◑ ') + mtfResult.label;
-  }
-
-  // Filter panel indicators
-  renderFilterPanel(ind);
-
-  // KPI
-  document.getElementById('kpiADX').textContent = ind.adx ? ind.adx.toFixed(1) : '--';
-  document.getElementById('kpiRSI').textContent = ind.rsi ? ind.rsi.toFixed(1) : '--';
-  document.getElementById('adxStatus').textContent  = ind.adx > (TF_CONFIG[activeTF].adxMin) ? '✓ 通过' : '✗ 未通过';
-  document.getElementById('adxStatus').className    = `filter-status ${ind.adx > TF_CONFIG[activeTF].adxMin ? 'status-pass' : 'status-fail'}`;
-  document.getElementById('macdStatus').textContent = filters.macd ? '✓ 通过' : '✗ 未通过';
-  document.getElementById('macdStatus').className   = `filter-status ${filters.macd ? 'status-pass' : 'status-fail'}`;
-  document.getElementById('rsiStatus').textContent  = filters.rsi  ? '✓ 通过' : '✗ 未通过';
-  document.getElementById('rsiStatus').className    = `filter-status ${filters.rsi  ? 'status-pass' : 'status-fail'}`;
-
-  // Check new signal
-  checkNewSignal(sig, price);
+  if(signalHistory.length>20)signalHistory.pop();
+  renderHistory();
+  showToast(coin,tf,sig);
 }
-
-function renderFilterPanel(ind) {
-  document.getElementById('adxVal').textContent   = ind.adx    ? ind.adx.toFixed(1)    : '--';
-  document.getElementById('plusDI').textContent   = ind.plusDI ? ind.plusDI.toFixed(1) : '--';
-  document.getElementById('minusDI').textContent  = ind.minusDI? ind.minusDI.toFixed(1): '--';
-  document.getElementById('atrVal').textContent   = ind.atr    ? ind.atr.toFixed(2)    : '--';
-  document.getElementById('macdVal').textContent  = ind.macd   ? ind.macd.toFixed(4)   : '--';
-  document.getElementById('signalVal').textContent= ind.signal ? ind.signal.toFixed(4) : '--';
-  document.getElementById('histVal').textContent  = ind.hist   ? ind.hist.toFixed(4)   : '--';
-  document.getElementById('histVal').style.color  = ind.hist > 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('zeroPos').textContent  = ind.macd > 0 ? '零轴上方' : '零轴下方';
-  document.getElementById('zeroPos').style.color  = ind.macd > 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('rsiVal').textContent   = ind.rsi   ? ind.rsi.toFixed(1)    : '--';
-  let rsiZone = '中性区间';
-  if (ind.rsi >= 70) rsiZone = '超买区'; else if (ind.rsi <= 30) rsiZone = '超卖区';
-  else if (ind.rsi >= 55) rsiZone = '偏强区';  else if (ind.rsi <= 45) rsiZone = '偏弱区';
-  document.getElementById('rsiZone').textContent = rsiZone;
-}
-
-function getMTFConsistency() {
-  const sigs = TFS.map(tf => state[activeCoin][tf].signal?.dir);
-  const allBull = sigs.every(d => d === 'bull');
-  const allBear = sigs.every(d => d === 'bear');
-  const twoBull = sigs.filter(d => d === 'bull').length >= 2;
-  const twoBear = sigs.filter(d => d === 'bear').length >= 2;
-
-  if (allBull)  return { pass: true,  label: '三周期共振做多 🚀' };
-  if (allBear)  return { pass: true,  label: '三周期共振做空 🔻' };
-  if (twoBull)  return { pass: false, label: '两周期偏多，待确认' };
-  if (twoBear)  return { pass: false, label: '两周期偏空，待确认' };
-  return { pass: false, label: '方向分歧，建议观望' };
-}
-
-// ══════════════════════════════════════════════════
-//  MTF Cards
-// ══════════════════════════════════════════════════
-function refreshMTFCards() {
-  const dirMap = {
-    bull:    { text: '做多 ▲',   cls: 'bull', tfClass: 'bull-tf' },
-    bear:    { text: '做空 ▼',   cls: 'bear', tfClass: 'bear-tf' },
-    wait:    { text: '等待观察', cls: 'wait', tfClass: 'wait-tf' },
-    noentry: { text: '横盘',     cls: 'none', tfClass: '' },
-    none:    { text: '--',       cls: 'none', tfClass: '' },
-  };
-  const sigBadgeMap = {
-    bull: 'sig-bull', bear: 'sig-bear', wait: 'sig-wait', noentry: 'sig-none', none: 'sig-none'
-  };
-  const sigTextMap = {
-    bull: '做多', bear: '做空', wait: '等待', noentry: '横盘', none: '--'
-  };
-
-  TFS.forEach(tf => {
-    const sig = state[activeCoin][tf].signal;
-    const ind = state[activeCoin][tf].indicators;
-    const dir = sig?.dir ?? 'none';
-    const d = dirMap[dir] || dirMap.none;
-
-    const card = document.getElementById(`mtf-${tf}`);
-    if (!card) return;
-    card.className = `mtf-card ${d.tfClass} ${tf === activeTF ? 'active-tf' : ''}`;
-
-    const dirEl  = document.getElementById(`mtf-${tf}-dir`);
-    const badge  = document.getElementById(`mtf-${tf}-badge`);
-    const meta   = document.getElementById(`mtf-${tf}-meta`);
-    const strat  = document.getElementById(`mtf-${tf}-strategy`);
-
-    if (dirEl) { dirEl.className = `mtf-dir ${d.cls}`; dirEl.textContent = d.text; }
-    if (badge) { badge.className = `mtf-badge ${sigBadgeMap[dir]}`; badge.textContent = sigTextMap[dir]; }
-    if (meta && ind) {
-      meta.textContent = `ADX ${ind.adx?.toFixed(1) ?? '--'} · RSI ${ind.rsi?.toFixed(1) ?? '--'} · MACD ${ind.hist ? (ind.hist > 0 ? '+' : '') + ind.hist.toFixed(3) : '--'}`;
-    }
-
-    // Strategy tip
-    const stratMap = {
-      '15m': {
-        bull: '15m 做多信号 · 建议等 1H 确认后轻仓做多，快进快出，止损 ATR×1.0',
-        bear: '15m 做空信号 · 建议等 1H 确认后轻仓做空，快进快出，止损 ATR×1.0',
-        wait: '15m 等待中，短期动能不明确，继续观察 MACD 方向变化',
-        noentry: '15m 横盘，趋势不明，不建议在此周期开单',
-      },
-      '1h': {
-        bull: '1H 做多信号 ✅ · 主要交易周期确认，建议 1-2% 仓位做多，止损 ATR×1.5',
-        bear: '1H 做空信号 ✅ · 主要交易周期确认，建议 1-2% 仓位做空，止损 ATR×1.5',
-        wait: '1H 等待信号，关注 MACD 交叉和 ADX 方向突破',
-        noentry: '1H 横盘整理，建议空仓等待趋势明确',
-      },
-      '4h': {
-        bull: '4H 做多信号 🚀 · 中期趋势向上，可加大仓位 2-3%，止损 ATR×2.0，持仓 1-3 天',
-        bear: '4H 做空信号 🔻 · 中期趋势向下，可加大仓位 2-3%，止损 ATR×2.0，持仓 1-3 天',
-        wait: '4H 等待信号，中期趋势尚未确立，仅轻仓配合低周期操作',
-        noentry: '4H 横盘整理，这是最重要的方向参考，未出信号前慎重',
-      },
-    };
-    if (strat && stratMap[tf]) {
-      strat.textContent = stratMap[tf][dir] || stratMap[tf].noentry || '';
-    }
-  });
-
-  // MTF filter detail
-  const mtfResult = getMTFConsistency();
-  const detail = TFS.map(tf => {
-    const d = state[activeCoin][tf].signal?.dir ?? 'none';
-    const map2 = { bull: '做多', bear: '做空', wait: '等待', noentry: '横盘', none: '--' };
-    return `${tf}: ${map2[d] || '--'}`;
-  }).join(' | ');
-  document.getElementById('mtfFilterDetail').textContent = detail;
-  document.getElementById('mtfStatus').textContent  = mtfResult.label;
-  document.getElementById('mtfStatus').className    = `filter-status ${mtfResult.pass ? 'status-pass' : 'status-fail'}`;
-
-  if (activeTF === activeTF) renderMainView();
-}
-
-function refreshMainSignal() {
-  renderMainView();
-  updateCharts();
-}
-
-// ══════════════════════════════════════════════════
-//  Signal history & toast
-// ══════════════════════════════════════════════════
-let lastSignalKey = '';
-function checkNewSignal(sig, price) {
-  const key = `${activeCoin}-${activeTF}-${sig.dir}-${Math.round(price)}`;
-  if (key === lastSignalKey) return;
-  if (sig.dir !== 'bull' && sig.dir !== 'bear') { lastSignalKey = key; return; }
-  lastSignalKey = key;
-
-  const ind = state[activeCoin][activeTF].indicators;
-  const op  = calcOrderParams(ind, activeTF, price, sig.dir);
-  const d   = COINS[activeCoin].decimals;
-  const entry = { coin: activeCoin, tf: activeTF, dir: sig.dir, price, conf: sig.conf, op, time: new Date() };
-  signalHistory.unshift(entry);
-  if (signalHistory.length > 10) signalHistory.pop();
-  renderSignalHistory();
-  updateKPI();
-
-  // Toast
-  const label = sig.dir === 'bull' ? '🚀 做多信号' : '🔻 做空信号';
-  showToast(sig.dir, `${COINS[activeCoin].name} ${activeTF.toUpperCase()} ${label}`, op, price, d, sig.conf);
-}
-
-function renderSignalHistory() {
-  const container = document.getElementById('signalHistory');
-  document.getElementById('historyMeta').textContent = `最近 ${signalHistory.length} 条`;
-  if (signalHistory.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px;font-size:12px;">等待信号生成...</div>';
+function renderHistory(){
+  const tb=document.getElementById('historyBody');
+  if(!signalHistory.length){
+    tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#4a5568;padding:20px">等待信号...</td></tr>';
     return;
   }
-  container.innerHTML = signalHistory.map((s, i) => {
-    const d = COINS[s.coin]?.decimals ?? 2;
-    const isBull = s.dir === 'bull';
-    const result = i === 0 ? 'open' : (Math.random() > 0.45 ? 'win' : 'loss');
-    const resultText = result === 'open' ? '持仓中' : result === 'win' ? `+${(Math.random()*2+1).toFixed(1)}%` : `-${(Math.random()*0.8+0.3).toFixed(1)}%`;
-    const resultCls  = result === 'open' ? 'sh-open' : result === 'win' ? 'sh-win' : 'sh-loss';
-    return `<div class="sh-item">
-      <span class="sh-badge ${isBull ? 'sh-bull' : 'sh-bear'}">${isBull ? '做多' : '做空'}</span>
-      <span class="sh-tf">${s.tf.toUpperCase()}</span>
-      <span style="font-size:10px;color:var(--accent);font-weight:600;">${s.coin}</span>
-      <span class="sh-time">${s.time.toLocaleTimeString('zh-CN', {hour12:false})}</span>
-      <span class="sh-price">$${fmt(s.price, d)}</span>
-      ${s.op ? `<span class="sh-sl">SL $${fmt(s.op.sl, d)}</span><span class="sh-tp">TP1 $${fmt(s.op.tp1, d)}</span>` : '<span class="sh-sl">--</span><span class="sh-tp">--</span>'}
-      <span class="sh-conf">${s.conf}%</span>
-      <span class="sh-result ${resultCls}">${resultText}</span>
+  tb.innerHTML=signalHistory.map(h=>`
+    <tr>
+      <td>${h.time}</td>
+      <td><span class="badge ${h.dir}" style="font-size:11px">${h.coin} ${dirArrow(h.dir)}</span></td>
+      <td>${(h.entry||0).toFixed(COINS[h.coin].precision)}</td>
+      <td style="color:var(--red)">${(h.sl||0).toFixed(COINS[h.coin].precision)}</td>
+      <td style="color:var(--green)">${(h.tp1||0).toFixed(COINS[h.coin].precision)}</td>
+      <td>${h.conf}%</td>
+      <td>--</td>
+    </tr>
+  `).join('');
+}
+
+// ── Toast ─────────────────────────────────────
+function showToast(coin,tf,sig){
+  const wrap=document.getElementById('toastWrap');
+  const toast=document.createElement('div');
+  toast.className='toast '+dirClass(sig.dir);
+  const p=COINS[coin].precision;
+  toast.innerHTML=`
+    <div class="toast-title">${dirArrow(sig.dir)} ${COINS[coin].display} ${dirText(sig.dir)} [${TF_LABELS[tf]}]</div>
+    <div class="toast-body">
+      入场: ${sig.entry.toFixed(p)} &nbsp;|&nbsp; 止损: ${(sig.sl||0).toFixed(p)}<br>
+      TP1: ${(sig.tp1||0).toFixed(p)} &nbsp;|&nbsp; TP2: ${(sig.tp2||0).toFixed(p)}<br>
+      盈亏比: ${sig.rr} &nbsp;|&nbsp; 置信度: ${sig.confidence}%
     </div>`;
-  }).join('');
+  wrap.prepend(toast);
+  setTimeout(()=>toast.remove(),12000);
 }
 
-function updateKPI() {
-  const bulls = signalHistory.filter(s => s.dir === 'bull').length;
-  const bears = signalHistory.filter(s => s.dir === 'bear').length;
-  document.getElementById('kpiTotal').textContent = signalHistory.length;
-  document.getElementById('kpiBull').textContent  = bulls;
-  document.getElementById('kpiBear').textContent  = bears;
-}
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+async function init(){
+  buildSidebar();
+  setConnStatus('wait');
 
-function showToast(dir, title, op, price, d, conf) {
-  const container = document.getElementById('toastContainer');
-  const toast = document.createElement('div');
-  toast.className = `toast ${dir}`;
-  toast.innerHTML = `
-    <div class="toast-header">
-      <span class="toast-title">${title}</span>
-      <span class="toast-close" onclick="this.closest('.toast').remove()">×</span>
-    </div>
-    <div class="toast-row"><span class="label">入场价</span><span class="val accent">$${fmt(price, d)}</span></div>
-    ${op ? `
-    <div class="toast-row"><span class="label">止损 SL</span><span class="val red">$${fmt(op.sl, d)}</span></div>
-    <div class="toast-row"><span class="label">止盈 TP1</span><span class="val green">$${fmt(op.tp1, d)}</span></div>
-    <div class="toast-row"><span class="label">止盈 TP2</span><span class="val" style="color:#58ff82">$${fmt(op.tp2, d)}</span></div>
-    <div class="toast-row"><span class="label">盈亏比</span><span class="val cyan">1:${op.rr.toFixed(1)}</span></div>` : ''}
-    <div class="toast-row"><span class="label">置信度</span><span class="val">${conf}%</span></div>`;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), 12000);
-}
-
-// ══════════════════════════════════════════════════
-//  Charts
-// ══════════════════════════════════════════════════
-function buildCharts() {
-  const st = state[activeCoin][activeTF];
-  if (!st.loaded) return;
-  buildPriceChart(st.candles, st.signals);
-  buildMacdChart(st.indicators?.macdHistory);
-  buildRsiChart(st.indicators?.rsiHistory);
-}
-
-function buildPriceChart(candles, signals) {
-  if (!candles || candles.length === 0) return;
-  const ctx = document.getElementById('priceChart').getContext('2d');
-  if (charts.price) charts.price.destroy();
-  const slice = candles.slice(-80);
-  const labels = slice.map(c => new Date(c.time).toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'}));
-  const closes = slice.map(c => c.close);
-  const coinColor = COINS[activeCoin].color;
-  charts.price = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: `${activeCoin}/USDT`,
-        data: closes,
-        borderColor: coinColor,
-        backgroundColor: coinColor + '15',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
-        fill: true,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: '#8b949e', maxTicksLimit: 8, font: {size: 10} }, grid: { color: '#30363d44' } },
-        y: { ticks: { color: '#8b949e', font: {size: 10} }, grid: { color: '#30363d44' } }
-      }
+  // 并发拉取所有币种×时间框架的历史数据
+  const tasks=[];
+  for(const coin of Object.keys(COINS)){
+    for(const tf of TFS){
+      tasks.push(fetchKlines(coin,tf));
     }
-  });
-  document.getElementById('chartTitle').textContent = `📈 ${COINS[activeCoin].name} · ${activeTF.toUpperCase()} 价格走势`;
-}
-
-function buildMacdChart(macdHistory) {
-  if (!macdHistory) return;
-  const ctx = document.getElementById('macdChart').getContext('2d');
-  if (charts.macd) charts.macd.destroy();
-  const valid = macdHistory.filter(m => m.hist !== null);
-  const labels = valid.map((_, i) => i);
-  charts.macd = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Histogram', data: valid.map(m => m.hist), backgroundColor: valid.map(m => m.hist >= 0 ? 'rgba(63,185,80,.6)' : 'rgba(248,81,73,.6)'), borderRadius: 2 },
-        { label: 'MACD',   type: 'line', data: valid.map(m => m.macd),   borderColor: '#58a6ff', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
-        { label: 'Signal', type: 'line', data: valid.map(m => m.signal), borderColor: '#f7931a', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#8b949e', font: {size: 10} } } },
-      scales: {
-        x: { display: false },
-        y: { ticks: { color: '#8b949e', font: {size: 10} }, grid: { color: '#30363d44' } }
-      }
-    }
-  });
-}
-
-function buildRsiChart(rsiHistory) {
-  if (!rsiHistory) return;
-  const ctx = document.getElementById('rsiChart').getContext('2d');
-  if (charts.rsi) charts.rsi.destroy();
-  const valid = rsiHistory.filter(v => v !== null);
-  const labels = valid.map((_, i) => i);
-  charts.rsi = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'RSI', data: valid, borderColor: '#bc8cff', backgroundColor: 'rgba(188,140,255,.1)', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true },
-        { label: '超买 70', data: valid.map(() => 70), borderColor: '#f85149', borderWidth: 1, borderDash: [5,3], pointRadius: 0 },
-        { label: '超卖 30', data: valid.map(() => 30), borderColor: '#3fb950', borderWidth: 1, borderDash: [5,3], pointRadius: 0 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#8b949e', font: {size: 10} } } },
-      scales: {
-        x: { display: false },
-        y: { min: 0, max: 100, ticks: { color: '#8b949e', font: {size: 10} }, grid: { color: '#30363d44' } }
-      }
-    }
-  });
-}
-
-function updateCharts() {
-  const st = state[activeCoin][activeTF];
-  if (!st.loaded) return;
-  buildPriceChart(st.candles, null);
-  if (st.indicators) {
-    buildMacdChart(st.indicators.macdHistory);
-    buildRsiChart(st.indicators.rsiHistory);
   }
-}
+  await Promise.allSettled(tasks);
 
-// ══════════════════════════════════════════════════
-//  WS Status
-// ══════════════════════════════════════════════════
-function setWsStatus(status) {
-  const dot  = document.getElementById('wsDot');
-  const text = document.getElementById('wsStatusText');
-  const badge = document.getElementById('wsBadge');
-  if (status === 'connected') {
-    dot.className = 'ws-dot ws-connected';
-    text.textContent = `已连接 ${COINS[activeCoin].name} ${activeTF.toUpperCase()} 实时数据流`;
-    text.style.color = 'var(--green)';
-    badge.innerHTML = `<span class="dot dot-green"></span>实时`;
-    badge.style.cssText = 'background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;';
-  } else if (status === 'connecting') {
-    dot.className = 'ws-dot ws-connecting';
-    text.textContent = `正在连接 ${COINS[activeCoin].name} ${activeTF.toUpperCase()} WebSocket...`;
-    text.style.color = 'var(--yellow)';
-    badge.innerHTML = `<span class="dot dot-yellow" style="animation:pulse 1s infinite"></span>连接中`;
-    badge.style.cssText = 'background:rgba(227,179,65,.15);color:var(--yellow);border:1px solid rgba(227,179,65,.3);padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;';
-  } else {
-    dot.className = 'ws-dot ws-error';
-    text.textContent = '连接断开，5秒后重连...';
-    text.style.color = 'var(--red)';
-    badge.innerHTML = `<span class="dot dot-red"></span>断线`;
-    badge.style.cssText = 'background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.3);padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;';
+  // 建立 WebSocket（只连当前激活币种 + 所有tf）
+  function connectActive(){
+    Object.keys(COINS).forEach(coin=>{
+      TFS.forEach(tf=>connectWS(coin,tf));
+    });
   }
+  connectActive();
+
+  renderAll();
+  Object.keys(COINS).forEach(c=>updateSidebarCoin(c));
 }
 
-// ══════════════════════════════════════════════════
-//  Switch handlers
-// ══════════════════════════════════════════════════
-function switchCoin(coin) {
-  activeCoin = coin;
-  lastSignalKey = '';
-  document.querySelectorAll('.coin-btn').forEach(b => b.classList.remove('active'));
-  const cb = document.getElementById(`coinBtn-${coin}`);
-  if (cb) cb.classList.add('active');
-  document.querySelectorAll('.overview-card').forEach(c => c.classList.remove('active'));
-  const oc = document.getElementById(`ov-${coin}`);
-  if (oc) oc.classList.add('active');
-  document.getElementById('headerSymbol').textContent = COINS[coin].name;
-  connectWS(coin, activeTF);
-  renderMainView();
-  refreshMTFCards();
-  buildCharts();
-  Object.keys(COINS).forEach(c => updateOverviewCard(c));
-}
-
-function switchTF(tf) {
-  activeTF = tf;
-  lastSignalKey = '';
-  document.querySelectorAll('.tf-btn').forEach(b => b.classList.toggle('active', b.dataset.tf === tf));
-  connectWS(activeCoin, tf);
-  renderMainView();
-  refreshMTFCards();
-  buildCharts();
-}
-
-window.switchTF = switchTF;
-window.switchCoin = switchCoin;
-
-// ── Chart tab switch ──
-function showChart(type) {
-  ['price','macd','rsi'].forEach(t => {
-    document.getElementById('chart' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === type);
-  });
-  document.querySelectorAll('.card-title .tab').forEach((b, i) => b.classList.toggle('active', i === ['price','macd','rsi'].indexOf(type)));
-}
-window.showChart = showChart;
-
-// ── Strategy tab switch ──
-function switchStratTab(tf) {
-  ['15m','1h','4h','mtf'].forEach(t => {
-    document.getElementById(`strat-${t}`).classList.toggle('active', t === tf);
-  });
-  document.querySelectorAll('.card .tabs .tab').forEach((b, i) => b.classList.toggle('active', ['15m','1h','4h','mtf'].indexOf(tf) === i));
-}
-window.switchStratTab = switchStratTab;
-
-// ── Init ──
-init();
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
