@@ -4,9 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>加密货币三重过滤实时监控</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!-- Chart.js + Financial(蜡烛图) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{background:#0b0f1a;color:#e2e8f0;font-family:'Segoe UI',sans-serif;font-size:14px}
 :root{
   --green:#00c853;--red:#ff3d57;--yellow:#ffd600;--blue:#2979ff;
@@ -16,113 +21,180 @@ body{background:#0b0f1a;color:#e2e8f0;font-family:'Segoe UI',sans-serif;font-siz
 
 /* ── 顶部状态栏 ── */
 #topbar{background:#0d1117;border-bottom:1px solid var(--border);
-  padding:8px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-#topbar .logo{font-size:18px;font-weight:700;color:#fff;letter-spacing:.5px}
-#topbar .logo span{color:var(--blue)}
-.conn-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px}
+  padding:8px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  min-height:44px}
+.logo{font-size:18px;font-weight:700;color:#fff}
+.logo span{color:var(--blue)}
+.conn-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 .conn-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
 .conn-dot.ng{background:var(--red)}
-.conn-dot.wait{background:var(--yellow)}
-#connStatus{font-size:12px;display:flex;align-items:center;gap:6px}
+.conn-dot.wait{background:var(--yellow);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#connStatus{display:flex;align-items:center;gap:5px;font-size:12px}
 .lastUpdate{color:#64748b;font-size:11px;margin-left:auto}
 
 /* ── 布局 ── */
 .main-wrap{display:flex;height:calc(100vh - 44px);overflow:hidden}
-.sidebar{width:240px;min-width:200px;background:var(--bg1);
-  border-right:1px solid var(--border);overflow-y:auto;padding:10px 8px}
-.content{flex:1;overflow-y:auto;padding:14px}
+.sidebar{width:230px;min-width:180px;background:var(--bg1);
+  border-right:1px solid var(--border);overflow-y:auto;padding:10px 8px;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:14px;min-width:0}
 
 /* ── 侧边栏币种卡 ── */
 .coin-card{border-radius:10px;padding:10px 12px;margin-bottom:8px;
-  background:var(--bg2);border:1px solid var(--border);cursor:pointer;
-  transition:all .2s}
+  background:var(--bg2);border:1px solid var(--border);cursor:pointer;transition:all .2s}
 .coin-card:hover,.coin-card.active{border-color:var(--blue);background:var(--bg3)}
-.coin-card .name{font-weight:700;font-size:15px}
-.coin-card .price{font-size:18px;font-weight:700;margin:4px 0}
-.coin-card .chg{font-size:12px}
-.coin-card .sig-badges{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.coin-card .cn{font-weight:700;font-size:14px;margin-bottom:2px}
+.coin-card .cp{font-size:17px;font-weight:700;margin:3px 0}
+.coin-card .sig-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+
+/* ── badge ── */
 .badge{display:inline-flex;align-items:center;padding:2px 7px;
-  border-radius:12px;font-size:11px;font-weight:600;gap:3px}
+  border-radius:12px;font-size:11px;font-weight:600;gap:2px}
 .badge.long{background:rgba(0,200,83,.18);color:var(--green);border:1px solid rgba(0,200,83,.4)}
 .badge.short{background:rgba(255,61,87,.18);color:var(--red);border:1px solid rgba(255,61,87,.4)}
 .badge.wait{background:rgba(255,214,0,.12);color:var(--yellow);border:1px solid rgba(255,214,0,.3)}
-.badge.neutral{background:rgba(74,85,104,.3);color:#94a3b8;border:1px solid var(--border)}
-.badge.tf{font-size:10px;padding:1px 5px}
+.badge.neutral{background:rgba(74,85,104,.25);color:#94a3b8;border:1px solid var(--border)}
+.badge.sm{font-size:10px;padding:1px 5px}
 
-/* ── 内容区顶部信号卡 ── */
-.signal-hero{background:var(--bg1);border-radius:14px;padding:18px 22px;
-  margin-bottom:14px;border:2px solid var(--border);position:relative;overflow:hidden}
-.signal-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+/* ── 信号英雄卡 ── */
+.signal-hero{background:var(--bg1);border-radius:14px;padding:16px 20px;
+  margin-bottom:12px;border:2px solid var(--border);position:relative}
+.signal-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
 .signal-hero.long::before{background:linear-gradient(90deg,var(--green),transparent)}
 .signal-hero.short::before{background:linear-gradient(90deg,var(--red),transparent)}
 .signal-hero.wait::before{background:linear-gradient(90deg,var(--yellow),transparent)}
-.hero-top{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.hero-signal{font-size:26px;font-weight:800;display:flex;align-items:center;gap:10px}
-.hero-signal .arrow{font-size:32px}
-.hero-meta{font-size:12px;color:#64748b;margin-top:4px}
-.conf-ring{position:relative;width:80px;height:80px}
+.hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hero-signal{font-size:24px;font-weight:800;display:flex;align-items:center;gap:10px}
+.hero-meta{font-size:11px;color:#64748b;margin-top:3px}
+.conf-ring{position:relative;width:72px;height:72px;flex-shrink:0}
 .conf-ring canvas{position:absolute;top:0;left:0}
 .conf-pct{position:absolute;inset:0;display:flex;align-items:center;
-  justify-content:center;font-size:16px;font-weight:700}
+  justify-content:center;font-size:15px;font-weight:700}
+.filter-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+
+/* ── 三周期标签切换 ── */
+.tf-tabs{display:flex;gap:6px;margin-bottom:10px}
+.tf-tab{padding:6px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;
+  border:1px solid var(--border);background:var(--bg2);color:#94a3b8;transition:all .2s;
+  display:flex;align-items:center;gap:6px}
+.tf-tab:hover{border-color:var(--blue);color:#fff}
+.tf-tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.tf-tab .tab-sig{font-size:10px}
 
 /* ── 三周期确认行 ── */
-.tf-confirm-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
-.tf-box{background:var(--bg2);border-radius:10px;padding:12px;border:1px solid var(--border)}
-.tf-box .tf-label{font-size:11px;color:#64748b;margin-bottom:6px;
+.tf-confirm-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.tf-box{background:var(--bg2);border-radius:10px;padding:12px;border:1px solid var(--border);
+  cursor:pointer;transition:border-color .2s}
+.tf-box:hover{border-color:var(--blue)}
+.tf-box.active-tf{border-color:var(--blue)!important;background:var(--bg3)}
+.tf-box.long{border-color:rgba(0,200,83,.45)}
+.tf-box.short{border-color:rgba(255,61,87,.45)}
+.tf-box.wait{border-color:rgba(255,214,0,.35)}
+.tf-box .tf-label{font-size:11px;color:#64748b;margin-bottom:4px;
   display:flex;align-items:center;justify-content:space-between}
-.tf-box .tf-sig{font-size:16px;font-weight:700}
-.tf-box .tf-strat{font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.5}
-.tf-box.long{border-color:rgba(0,200,83,.5)}
-.tf-box.short{border-color:rgba(255,61,87,.5)}
-.tf-box.wait{border-color:rgba(255,214,0,.4)}
+.tf-box .tf-sig{font-size:15px;font-weight:700;margin-bottom:4px}
+.tf-box .tf-strat{font-size:10px;color:#64748b;line-height:1.5}
+.tf-box .tf-params{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.tf-box .tp{font-size:10px;color:#94a3b8}
+.tf-box .tp span{color:#e2e8f0;font-weight:600}
 
 /* ── 开单参数 ── */
-.entry-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
-.entry-cell{background:var(--bg2);border-radius:8px;padding:10px;text-align:center;
-  border:1px solid var(--border)}
-.entry-cell .ec-label{font-size:10px;color:#64748b;margin-bottom:4px}
-.entry-cell .ec-val{font-size:14px;font-weight:700}
-
-/* ── 过滤指标条 ── */
-.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.entry-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+.entry-cell{background:var(--bg2);border-radius:8px;padding:9px;text-align:center;border:1px solid var(--border)}
+.ec-label{font-size:10px;color:#64748b;margin-bottom:3px}
+.ec-val{font-size:13px;font-weight:700}
 
 /* ── 图表区 ── */
-.chart-section{background:var(--bg1);border-radius:14px;padding:16px;
-  margin-bottom:14px;border:1px solid var(--border)}
-.chart-section h3{font-size:14px;font-weight:600;margin-bottom:10px;
-  color:#94a3b8;display:flex;align-items:center;gap:8px}
-.chart-wrap{height:280px;position:relative}
+.chart-section{background:var(--bg1);border-radius:14px;padding:14px 16px;
+  margin-bottom:12px;border:1px solid var(--border)}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.chart-header h3{font-size:13px;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px}
+.chart-wrap{height:300px;position:relative}
 
 /* ── 历史记录 ── */
-.history-section{background:var(--bg1);border-radius:14px;padding:16px;
-  border:1px solid var(--border)}
-.history-section h3{font-size:14px;font-weight:600;margin-bottom:10px;color:#94a3b8}
+.history-section{background:var(--bg1);border-radius:14px;padding:14px 16px;border:1px solid var(--border)}
+.history-section h3{font-size:13px;font-weight:600;margin-bottom:10px;color:#94a3b8}
 .hist-table{width:100%;border-collapse:collapse;font-size:12px}
-.hist-table th{color:#64748b;text-align:left;padding:6px 8px;
-  border-bottom:1px solid var(--border);font-weight:500}
-.hist-table td{padding:7px 8px;border-bottom:1px solid rgba(45,55,72,.5)}
+.hist-table th{color:#64748b;text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);font-weight:500}
+.hist-table td{padding:6px 8px;border-bottom:1px solid rgba(45,55,72,.4)}
 .hist-table tr:last-child td{border-bottom:none}
-.pnl-pos{color:var(--green)} .pnl-neg{color:var(--red)}
+.hist-table tr:hover td{background:rgba(255,255,255,.02)}
 
 /* ── Toast ── */
-#toastWrap{position:fixed;top:54px;right:16px;z-index:9999;
-  display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{background:var(--bg2);border-radius:10px;padding:12px 16px;
-  min-width:260px;max-width:320px;border-left:4px solid var(--green);
-  box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:all;
-  animation:slideIn .3s ease}
+#toastWrap{position:fixed;top:52px;right:14px;z-index:9999;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:300px}
+.toast{background:var(--bg2);border-radius:10px;padding:11px 14px;
+  border-left:4px solid var(--green);box-shadow:0 4px 20px rgba(0,0,0,.6);
+  pointer-events:all;animation:slideIn .3s ease}
 .toast.short{border-left-color:var(--red)}
 .toast.wait{border-left-color:var(--yellow)}
-@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:none;opacity:1}}
-.toast-title{font-weight:700;font-size:13px;margin-bottom:4px}
+@keyframes slideIn{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}
+.toast-title{font-weight:700;font-size:12px;margin-bottom:4px}
 .toast-body{font-size:11px;color:#94a3b8;line-height:1.6}
 
-/* ── 自适应 ── */
+/* ── 右侧涨幅榜面板 ── */
+.rankbar{width:210px;min-width:190px;background:var(--bg1);
+  border-left:1px solid var(--border);overflow-y:auto;padding:10px 8px;flex-shrink:0;
+  display:flex;flex-direction:column;gap:0}
+.rankbar-title{font-size:11px;font-weight:600;color:#64748b;padding:2px 4px 6px;
+  display:flex;align-items:center;justify-content:space-between}
+.rankbar-title .rank-refresh{font-size:10px;color:#4a5568;cursor:pointer;padding:2px 6px;
+  border-radius:4px;border:1px solid var(--border);background:var(--bg2)}
+.rankbar-title .rank-refresh:hover{color:#94a3b8}
+/* 涨跌榜标签 */
+.rank-tabs{display:flex;gap:4px;margin-bottom:8px}
+.rank-tab{flex:1;text-align:center;padding:4px;font-size:11px;font-weight:600;
+  border-radius:6px;cursor:pointer;border:1px solid var(--border);
+  background:var(--bg2);color:#64748b;transition:all .15s}
+.rank-tab.up.active{background:rgba(0,200,83,.15);border-color:rgba(0,200,83,.4);color:var(--green)}
+.rank-tab.down.active{background:rgba(255,61,87,.15);border-color:rgba(255,61,87,.4);color:var(--red)}
+/* 榜单行 */
+.rank-row{display:flex;align-items:center;padding:6px 6px;border-radius:8px;
+  cursor:pointer;gap:6px;border:1px solid transparent;margin-bottom:3px;
+  transition:all .15s;background:var(--bg2)}
+.rank-row:hover{border-color:var(--blue);background:var(--bg3)}
+.rank-row.watching{border-color:var(--blue)!important;background:var(--bg3)!important}
+.rank-row.watching .rr-sym{color:var(--blue)!important}
+.rr-num{font-size:10px;color:#4a5568;width:14px;text-align:right;flex-shrink:0}
+.rr-sym{font-size:12px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rr-chg{font-size:12px;font-weight:700;flex-shrink:0}
+.rr-sig{font-size:10px;flex-shrink:0;color:#4a5568}
+/* 观察列表 */
+.watch-section{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+.watch-section-title{font-size:10px;color:#4a5568;font-weight:600;padding:0 4px 6px;
+  display:flex;align-items:center;justify-content:space-between}
+.watch-clear{font-size:10px;color:#4a5568;cursor:pointer;padding:1px 5px;
+  border-radius:4px;border:1px solid var(--border)}
+.watch-clear:hover{color:var(--red);border-color:var(--red)}
+.watch-empty{font-size:11px;color:#374151;text-align:center;padding:16px 0}
+/* 策略观察卡 */
+.watch-card{background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:6px;
+  border:1px solid var(--border);cursor:pointer;transition:all .15s;position:relative}
+.watch-card:hover{border-color:var(--blue)}
+.watch-card.active{border-color:var(--blue);background:var(--bg3)}
+.watch-card .wc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.watch-card .wc-sym{font-size:12px;font-weight:700}
+.watch-card .wc-remove{font-size:11px;color:#374151;cursor:pointer;padding:1px 4px}
+.watch-card .wc-remove:hover{color:var(--red)}
+.watch-card .wc-sigs{display:flex;gap:3px;flex-wrap:wrap}
+.watch-card .wc-price{font-size:11px;color:#64748b;margin-top:3px}
+
+/* 策略观察主视图 */
+#watchView{display:none}
+#watchView .wv-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+#watchView .wv-back{cursor:pointer;color:var(--blue);font-size:13px;padding:4px 10px;
+  border-radius:6px;border:1px solid var(--blue);background:transparent}
+#watchView .wv-back:hover{background:rgba(41,121,255,.1)}
+#watchView .wv-title{font-size:18px;font-weight:700}
+#watchView .wv-chg{font-size:13px;font-weight:600}
+
 @media(max-width:768px){
   .main-wrap{flex-direction:column}
   .sidebar{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--border);
-    display:flex;overflow-x:auto;gap:8px;padding:8px}
-  .coin-card{min-width:150px;margin-bottom:0}
+    display:flex;overflow-x:auto;padding:8px;gap:8px}
+  .rankbar{width:100%;border-left:none;border-top:1px solid var(--border);
+    max-height:240px}
+  .coin-card{min-width:140px;margin-bottom:0}
   .entry-grid{grid-template-columns:repeat(3,1fr)}
   .tf-confirm-row{grid-template-columns:1fr}
 }
@@ -136,561 +208,1066 @@ body{background:#0b0f1a;color:#e2e8f0;font-family:'Segoe UI',sans-serif;font-siz
     <span class="conn-dot wait" id="connDot"></span>
     <span id="connText">连接中...</span>
   </div>
-  <div class="lastUpdate">最后更新: <span id="lastUpdateTime">--</span></div>
+  <div class="lastUpdate">更新: <span id="lastUpdateTime">--</span></div>
 </div>
 
 <div id="toastWrap"></div>
 
 <div class="main-wrap">
-  <!-- 侧边栏：四币种概览 -->
+  <!-- 侧边栏 -->
   <div class="sidebar" id="sidebar">
-    <div style="color:#64748b;font-size:11px;margin-bottom:8px;padding:0 4px">📊 币种概览</div>
-    <!-- 动态生成 -->
+    <div style="color:#64748b;font-size:11px;padding:2px 4px 8px;font-weight:600">📊 币种</div>
   </div>
 
-  <!-- 主内容区 -->
-  <div class="content" id="content">
+  <!-- 主内容 -->
+  <div class="content">
+
     <!-- 信号英雄卡 -->
-    <div class="signal-hero" id="signalHero">
+    <div class="signal-hero wait" id="signalHero">
       <div class="hero-top">
         <div>
-          <div class="hero-signal" id="heroSignal">
-            <span class="arrow" id="heroArrow">⏳</span>
-            <span id="heroText">正在加载...</span>
+          <div class="hero-signal">
+            <span id="heroArrow" style="font-size:28px">⏸</span>
+            <div>
+              <div id="heroText" style="color:var(--yellow)">等待信号</div>
+              <div class="hero-meta" id="heroMeta">--</div>
+            </div>
           </div>
-          <div class="hero-meta" id="heroMeta">等待数据...</div>
         </div>
         <div class="conf-ring">
-          <canvas id="confCanvas" width="80" height="80"></canvas>
+          <canvas id="confCanvas" width="72" height="72"></canvas>
           <div class="conf-pct" id="confPct">--</div>
         </div>
       </div>
-
-      <!-- 过滤层 badges -->
+      <!-- 过滤条 -->
       <div class="filter-row" id="filterRow">
         <span class="badge neutral">ADX趋势</span>
         <span class="badge neutral">DI方向</span>
-        <span class="badge neutral">MACD动量</span>
+        <span class="badge neutral">MACD金叉</span>
         <span class="badge neutral">RSI时机</span>
         <span class="badge neutral">零轴同侧</span>
       </div>
-
-      <!-- 三周期确认 -->
-      <div class="tf-confirm-row" id="tfConfirmRow">
-        <div class="tf-box" id="tf15m">
-          <div class="tf-label">15分钟 <span class="badge tf neutral">等待</span></div>
-          <div class="tf-sig">--</div>
-          <div class="tf-strat">短线做单 · R:R 1:1.5<br>止损 ATR×1 · 快进快出</div>
-        </div>
-        <div class="tf-box" id="tf1h">
-          <div class="tf-label">1小时 <span class="badge tf neutral">等待</span></div>
-          <div class="tf-sig">--</div>
-          <div class="tf-strat">波段做单 · R:R 1:2<br>止损 ATR×1.5 · 持仓4-8h</div>
-        </div>
-        <div class="tf-box" id="tf4h">
-          <div class="tf-label">4小时 <span class="badge tf neutral">等待</span></div>
-          <div class="tf-sig">--</div>
-          <div class="tf-strat">主趋势 · R:R 1:3<br>止损 ATR×2 · 持仓1-3天</div>
-        </div>
-      </div>
-
       <!-- 开单参数 -->
-      <div class="entry-grid" id="entryGrid">
+      <div class="entry-grid">
         <div class="entry-cell"><div class="ec-label">入场价</div><div class="ec-val" id="epEntry">--</div></div>
-        <div class="entry-cell"><div class="ec-label">止损(SL)</div><div class="ec-val" id="epSL" style="color:var(--red)">--</div></div>
-        <div class="entry-cell"><div class="ec-label">止盈1(TP1)</div><div class="ec-val" id="epTP1" style="color:var(--green)">--</div></div>
-        <div class="entry-cell"><div class="ec-label">止盈2(TP2)</div><div class="ec-val" id="epTP2" style="color:var(--green)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止损 SL</div><div class="ec-val" id="epSL" style="color:var(--red)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止盈 TP1</div><div class="ec-val" id="epTP1" style="color:var(--green)">--</div></div>
+        <div class="entry-cell"><div class="ec-label">止盈 TP2</div><div class="ec-val" id="epTP2" style="color:var(--green)">--</div></div>
         <div class="entry-cell"><div class="ec-label">盈亏比</div><div class="ec-val" id="epRR">--</div></div>
       </div>
     </div>
 
-    <!-- K线图 -->
-    <div class="chart-section">
-      <h3>📈 <span id="chartTitle">BTC/USDT</span> K线图</h3>
-      <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+    <!-- 三周期标签 + 确认盒子 -->
+    <div class="tf-tabs" id="tfTabs">
+      <div class="tf-tab active" data-tf="15m" onclick="selectTf('15m')">
+        15分钟 <span class="tab-sig" id="tabSig15m">⏸</span>
+      </div>
+      <div class="tf-tab" data-tf="1h" onclick="selectTf('1h')">
+        1小时 <span class="tab-sig" id="tabSig1h">⏸</span>
+      </div>
+      <div class="tf-tab" data-tf="4h" onclick="selectTf('4h')">
+        4小时 <span class="tab-sig" id="tabSig4h">⏸</span>
+      </div>
     </div>
 
-    <!-- 信号历史 -->
+    <!-- 三周期概览盒子（点击可切换） -->
+    <div class="tf-confirm-row" id="tfConfirmRow">
+      <div class="tf-box active-tf" id="tfbox-15m" onclick="selectTf('15m')">
+        <div class="tf-label">15分钟 <span class="badge sm neutral" id="tfbadge-15m">⏸</span></div>
+        <div class="tf-sig" id="tfsig-15m" style="color:var(--yellow)">等待</div>
+        <div class="tf-strat">短线做单 · 快进快出</div>
+        <div class="tf-params" id="tfparams-15m"></div>
+      </div>
+      <div class="tf-box" id="tfbox-1h" onclick="selectTf('1h')">
+        <div class="tf-label">1小时 <span class="badge sm neutral" id="tfbadge-1h">⏸</span></div>
+        <div class="tf-sig" id="tfsig-1h" style="color:var(--yellow)">等待</div>
+        <div class="tf-strat">波段做单 · 持仓4-8h</div>
+        <div class="tf-params" id="tfparams-1h"></div>
+      </div>
+      <div class="tf-box" id="tfbox-4h" onclick="selectTf('4h')">
+        <div class="tf-label">4小时 <span class="badge sm neutral" id="tfbadge-4h">⏸</span></div>
+        <div class="tf-sig" id="tfsig-4h" style="color:var(--yellow)">等待</div>
+        <div class="tf-strat">主趋势 · 持仓1-3天</div>
+        <div class="tf-params" id="tfparams-4h"></div>
+      </div>
+    </div>
+
+    <!-- 蜡烛图 -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <h3>🕯 <span id="chartTitle">BTC/USDT · 15分钟</span></h3>
+        <div style="font-size:11px;color:#4a5568">最近100根K线</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 历史信号 -->
     <div class="history-section">
       <h3>📜 信号历史</h3>
       <table class="hist-table">
         <thead>
           <tr>
-            <th>时间</th><th>方向</th><th>入场</th><th>SL</th><th>TP1</th>
-            <th>置信度</th><th>结果</th>
+            <th>时间</th><th>币种</th><th>周期</th><th>方向</th>
+            <th>入场</th><th>SL</th><th>TP1</th><th>置信度</th>
           </tr>
         </thead>
         <tbody id="historyBody">
-          <tr><td colspan="7" style="text-align:center;color:#4a5568;padding:20px">等待信号...</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:#4a5568;padding:20px">等待信号...</td></tr>
         </tbody>
       </table>
     </div>
+
+  </div><!-- /.content (主监控视图) -->
+
+  <!-- ══ 右侧：涨幅榜 + 策略观察 ══ -->
+  <div class="rankbar" id="rankbar">
+    <div class="rankbar-title">
+      <span>🔥 合约涨跌榜</span>
+      <span class="rank-refresh" onclick="fetchRankList()">刷新</span>
+    </div>
+    <!-- 涨/跌切换 Tab -->
+    <div class="rank-tabs">
+      <div class="rank-tab up active" id="rankTabUp"   onclick="switchRankTab('up')">涨幅 ▲</div>
+      <div class="rank-tab down"     id="rankTabDown"  onclick="switchRankTab('down')">跌幅 ▽</div>
+    </div>
+    <!-- 榜单列表 -->
+    <div id="rankList">
+      <div style="text-align:center;color:#374151;padding:20px;font-size:12px">加载中...</div>
+    </div>
+    <!-- 策略观察列表 -->
+    <div class="watch-section">
+      <div class="watch-section-title">
+        <span>👁 策略观察</span>
+        <span class="watch-clear" onclick="clearWatchList()">清空</span>
+      </div>
+      <div id="watchList">
+        <div class="watch-empty">点击榜单币种添加观察</div>
+      </div>
+    </div>
   </div>
-</div>
+
+</div><!-- /.main-wrap -->
 
 <script>
-// ══════════════════════════════════════════════
-//  CONFIG
-// ══════════════════════════════════════════════
+// ════════════════════════════════════
+//  配置
+// ════════════════════════════════════
 const COINS = {
-  BTC: { symbol:'btcusdt', display:'BTC/USDT', precision:1, color:'#F7931A' },
-  ETH: { symbol:'ethusdt', display:'ETH/USDT', precision:2, color:'#627EEA' },
-  SOL: { symbol:'solusdt', display:'SOL/USDT', precision:3, color:'#9945FF' },
-  BNB: { symbol:'bnbusdt', display:'BNB/USDT', precision:2, color:'#F3BA2F' },
+  BTC:{ symbol:'btcusdt', display:'BTC/USDT', prec:1, color:'#F7931A' },
+  ETH:{ symbol:'ethusdt', display:'ETH/USDT', prec:2, color:'#627EEA' },
+  SOL:{ symbol:'solusdt', display:'SOL/USDT', prec:3, color:'#9945FF' },
+  BNB:{ symbol:'bnbusdt', display:'BNB/USDT', prec:2, color:'#F3BA2F' },
 };
 const TFS = ['15m','1h','4h'];
-const TF_LABELS = {'15m':'15分钟','1h':'1小时','4h':'4小时'};
-const REST_BASE = 'https://fapi.binance.com';
-const WS_BASE   = 'wss://fstream.binance.com';
+const TF_LABEL = {'15m':'15分钟','1h':'1小时','4h':'4小时'};
+const TF_STRAT = {
+  '15m':'短线做单 · 快进快出',
+  '1h' :'波段做单 · 持仓4-8h',
+  '4h' :'主趋势 · 持仓1-3天'
+};
+const REST = 'https://fapi.binance.com';
+const WS   = 'wss://fstream.binance.com';
 
-// ── State ──
+// ── 状态 ──
 let activeCoin = 'BTC';
-let activeTf   = '1h';
-const coinData = {};  // coinData[coin][tf] = { klines:[], indicators:{} }
-const wsMap    = {};  // wsMap[coin][tf] = WebSocket
-const signalHistory = [];
+let activeTf   = '15m';
+const data = {};   // data[coin][tf].klines / .ind
+const socks = {};  // socks[coin][tf]
+const sigHist = [];
+// key = "COIN|tf|dir"，value = timestamp ms，冷却 10 分钟
+const sigCooldown = new Map();
 
-Object.keys(COINS).forEach(c => {
-  coinData[c] = {};
-  wsMap[c] = {};
-  TFS.forEach(tf => { coinData[c][tf] = { klines:[], indicators:{} }; });
+Object.keys(COINS).forEach(c=>{
+  data[c]={};  socks[c]={};
+  TFS.forEach(tf=>{ data[c][tf]={klines:[],ind:null}; });
 });
 
-// ══════════════════════════════════════════════
-//  INDICATORS
-// ══════════════════════════════════════════════
-function calcEMA(arr, p){
-  const k=2/(p+1); let ema=arr[0];
-  return arr.map((v,i)=>{ if(i===0)return ema; ema=v*k+ema*(1-k); return ema; });
+// ════════════════════════════════════
+//  指标计算
+// ════════════════════════════════════
+const ema=(arr,p)=>{ const k=2/(p+1); let e=arr[0];
+  return arr.map((v,i)=>{ if(!i)return e; e=v*k+e*(1-k); return e; }); };
+
+function calcMACD(c){
+  const e12=ema(c,12),e26=ema(c,26);
+  const m=e12.map((v,i)=>v-e26[i]);
+  const s=ema(m,9);
+  return {m, s, h:m.map((v,i)=>v-s[i])};
 }
-function calcMACD(closes){
-  const ema12=calcEMA(closes,12), ema26=calcEMA(closes,26);
-  const macd=ema12.map((v,i)=>v-ema26[i]);
-  const sig=calcEMA(macd,9);
-  const hist=macd.map((v,i)=>v-sig[i]);
-  return {macd,sig,hist};
-}
-function calcRSI(closes,p=14){
-  let gains=0,losses=0;
-  for(let i=1;i<=p;i++){
-    const d=closes[i]-closes[i-1];
-    if(d>0)gains+=d; else losses-=d;
-  }
-  let ag=gains/p, al=losses/p;
-  const rsi=[null];
-  for(let i=1;i<p;i++)rsi.push(null);
-  rsi.push(100-100/(1+ag/Math.max(al,1e-10)));
-  for(let i=p+1;i<closes.length;i++){
-    const d=closes[i]-closes[i-1];
-    const g=d>0?d:0, l=d<0?-d:0;
+function calcRSI(c,p=14){
+  let ag=0,al=0;
+  for(let i=1;i<=p;i++){ const d=c[i]-c[i-1]; d>0?ag+=d:al-=d; }
+  ag/=p; al/=p;
+  const r=Array(p+1).fill(null);
+  r.push(100-100/(1+ag/Math.max(al,1e-9)));
+  for(let i=p+1;i<c.length;i++){
+    const d=c[i]-c[i-1],g=d>0?d:0,l=d<0?-d:0;
     ag=(ag*(p-1)+g)/p; al=(al*(p-1)+l)/p;
-    rsi.push(100-100/(1+ag/Math.max(al,1e-10)));
+    r.push(100-100/(1+ag/Math.max(al,1e-9)));
   }
-  return rsi;
+  return r;
 }
-function calcATR(highs,lows,closes,p=14){
-  const tr=highs.map((h,i)=>i===0?h-lows[i]:Math.max(h-lows[i],Math.abs(h-closes[i-1]),Math.abs(lows[i]-closes[i-1])));
-  let atr=tr.slice(0,p).reduce((a,b)=>a+b,0)/p;
-  const atrs=[...Array(p-1).fill(null),atr];
-  for(let i=p;i<tr.length;i++){ atr=(atr*(p-1)+tr[i])/p; atrs.push(atr); }
-  return atrs;
+function calcATR(h,l,c,p=14){
+  const tr=h.map((v,i)=>i?Math.max(v-l[i],Math.abs(v-c[i-1]),Math.abs(l[i]-c[i-1])):v-l[i]);
+  let a=tr.slice(0,p).reduce((s,x)=>s+x,0)/p;
+  const out=[...Array(p-1).fill(null),a];
+  for(let i=p;i<tr.length;i++){ a=(a*(p-1)+tr[i])/p; out.push(a); }
+  return out;
 }
-function calcDMI(highs,lows,closes,p=14){
-  const dmPlus=[],dmMinus=[];
-  for(let i=1;i<highs.length;i++){
-    const up=highs[i]-highs[i-1], dn=lows[i-1]-lows[i];
-    dmPlus.push(up>dn&&up>0?up:0);
-    dmMinus.push(dn>up&&dn>0?dn:0);
+function calcDMI(h,l,c,p=14){
+  const dp=[],dm=[];
+  for(let i=1;i<h.length;i++){
+    const u=h[i]-h[i-1],d=l[i-1]-l[i];
+    dp.push(u>d&&u>0?u:0); dm.push(d>u&&d>0?d:0);
   }
-  const atr=calcATR(highs.slice(1),lows.slice(1),closes.slice(1),p);
-  let sp=dmPlus.slice(0,p).reduce((a,b)=>a+b,0);
-  let sm=dmMinus.slice(0,p).reduce((a,b)=>a+b,0);
-  const diP=[...Array(p).fill(null)], diM=[...Array(p).fill(null)], adx=[...Array(p*2-1).fill(null)];
+  const atr=calcATR(h.slice(1),l.slice(1),c.slice(1),p);
+  let sp=dp.slice(0,p).reduce((a,b)=>a+b,0);
+  let sm=dm.slice(0,p).reduce((a,b)=>a+b,0);
+  const diP=[...Array(p).fill(null)],diM=[...Array(p).fill(null)];
   diP.push(atr[p-1]?100*sp/atr[p-1]:0);
   diM.push(atr[p-1]?100*sm/atr[p-1]:0);
-  for(let i=p;i<dmPlus.length;i++){
-    sp=sp-sp/p+dmPlus[i]; sm=sm-sm/p+dmMinus[i];
+  for(let i=p;i<dp.length;i++){
+    sp=sp-sp/p+dp[i]; sm=sm-sm/p+dm[i];
     diP.push(atr[i]?100*sp/atr[i]:0);
     diM.push(atr[i]?100*sm/atr[i]:0);
   }
-  let adxVal=0; let adxStart=p;
-  for(let i=p;i<diP.length-p+1;i++){
-    const dx=diP[i]&&diM[i]?100*Math.abs(diP[i]-diM[i])/(diP[i]+diM[i]):0;
-    if(i<p*2-1){ adxVal+=dx; }
-    else{ if(i===p*2-1){ adxVal=(adxVal+dx)/p; adx.push(adxVal); }
-          else{ adxVal=(adxVal*(p-1)+dx)/p; adx.push(adxVal); } }
+  // ADX
+  const adx=[...Array(2*p-1).fill(null)];
+  let ax=0;
+  for(let i=p;i<diP.length;i++){
+    const dx=diP[i]+diM[i]>0?100*Math.abs(diP[i]-diM[i])/(diP[i]+diM[i]):0;
+    if(i<2*p-1) ax+=dx;
+    else if(i===2*p-1){ ax=(ax+dx)/p; adx.push(ax); }
+    else{ ax=(ax*(p-1)+dx)/p; adx.push(ax); }
   }
   return {diP,diM,adx};
 }
 
-function calcIndicators(klines){
-  if(klines.length<50)return null;
-  const closes=klines.map(k=>k.c);
-  const highs =klines.map(k=>k.h);
-  const lows  =klines.map(k=>k.l);
-  const {macd,sig,hist}=calcMACD(closes);
-  const rsi=calcRSI(closes);
-  const atr=calcATR(highs,lows,closes);
-  const {diP,diM,adx}=calcDMI(highs,lows,closes);
-  const n=closes.length-1;
+function buildInd(klines){
+  if(klines.length<80)return null;
+  const c=klines.map(k=>k.c),h=klines.map(k=>k.h),l=klines.map(k=>k.l);
+  const {m,s,h:mh}=calcMACD(c);
+  const rsi=calcRSI(c);
+  const atr=calcATR(h,l,c);
+  const {diP,diM,adx}=calcDMI(h,l,c);
+  const n=c.length-1;
+  // 多保留 3 根历史，用于严格判断金叉/死叉 + DI 穿越
   return {
-    close:closes[n], atr:atr[n]||0,
-    macd:macd[n], macdSig:sig[n], macdHist:hist[n],
-    prevMacdHist:hist[n-1],
-    rsi:rsi[n]||50,
-    diP:diP[n]||0, diM:diM[n]||0, adx:adx[n]||0,
-    macdHistArr:hist, rsiArr:rsi, adxArr:adx
+    close:c[n], open:klines[n].o, atr:atr[n]||0,
+    macd:m[n], macdS:s[n],
+    hist:mh[n], hist1:mh[n-1]||0, hist2:mh[n-2]||0,
+    rsi:rsi[n]||50, rsi1:rsi[n-1]||50,
+    diP:diP[n]||0,  diP1:diP[n-1]||0,
+    diM:diM[n]||0,  diM1:diM[n-1]||0,
+    adx:adx[n]||0,  adx1:adx[n-1]||0,
+    // 是否是已完成K线（最后一根为未完成，倒数第二根才是确认根）
+    closedHist: mh[n-1]||0, closedRsi: rsi[n-1]||50,
+    closedMacd: m[n-1]||0,
   };
 }
 
-// ══════════════════════════════════════════════
-//  SIGNAL ENGINE
-// ══════════════════════════════════════════════
+// ════════════════════════════════════
+//  信号引擎（均衡版 v2）
+//  调优说明：
+//    ADX  ：>22 即可触发（不要求连续上升，减少错过趋势初期）
+//    MACD叉：前1根hist<0 + 已完成根>0 即可（去掉 hist2 的双重确认）
+//    RSI  ：多头45-72 / 空头28-55（扩展10分区间，减少窗口太窄）
+//    零轴  ：改为软加分项，不做硬过滤（零轴同侧+8分置信度，但不阻断信号）
+// ════════════════════════════════════
 function getSignal(ind, tf){
-  if(!ind) return {dir:'wait',confidence:0,filters:{},entry:0,sl:0,tp1:0,tp2:0,rr:'--'};
-  const {close,atr,macd,macdSig,macdHist,prevMacdHist,rsi,diP,diM,adx}=ind;
-  const atrSafe=atr||close*0.002;
+  if(!ind) return {dir:'wait',conf:0,f:{},entry:0,sl:0,tp1:0,tp2:0,rr:'--'};
+  const {close, atr,
+         macd, hist, hist1, hist2,
+         closedHist, closedRsi, closedMacd,
+         rsi,
+         diP, diP1, diM, diM1,
+         adx, adx1} = ind;
+  const a = atr || close * 0.002;
 
-  // 过滤条件
-  const f1_adx   = adx>20;                        // ADX趋势强度
-  const f2_diDir = diP!==diM;                      // DI方向
-  const f3_macd  = macdHist>0!==prevMacdHist>0;   // MACD金叉/死叉
-  const f4_rsi_l = rsi>45&&rsi<70;                 // RSI多头区间
-  const f4_rsi_s = rsi<55&&rsi>30;                 // RSI空头区间
-  const f5_zero  = (macd>0&&diP>diM)||(macd<0&&diM>diP); // 零轴同侧
+  // ── F1: ADX 趋势强度（>22，或者>20且连续两次上升）──
+  const f_adx = adx > 22 || (adx > 20 && adx > adx1);
 
-  // 做多
-  const longFilters = [f1_adx, diP>diM, macdHist>0&&macdHist>prevMacdHist, f4_rsi_l, macd>0];
-  const shortFilters= [f1_adx, diM>diP, macdHist<0&&macdHist<prevMacdHist, f4_rsi_s, macd<0];
+  // ── F2: MACD 金叉 / 死叉（已完成K线符号切换，只需前1根确认）──
+  // 金叉：前1根 hist 为负，已完成根变为正（或动量持续扩大中）
+  const f_macd_cross_up   = hist1 < 0 && closedHist > 0;
+  // 死叉：前1根 hist 为正，已完成根变为负
+  const f_macd_cross_down = hist1 > 0 && closedHist < 0;
 
-  const longScore = longFilters.filter(Boolean).length;
-  const shortScore= shortFilters.filter(Boolean).length;
+  // F2 备选：MACD 动量持续扩大（已过金叉，柱体仍在扩大）
+  const f_macd_mom_up   = closedHist > 0 && hist > 0 && hist > hist1;
+  const f_macd_mom_down = closedHist < 0 && hist < 0 && hist < hist1;
 
-  // 不同周期 SL 倍数
-  const slMult  = tf==='15m'?1.0 : tf==='1h'?1.5 : 2.0;
-  const tp1Mult = tf==='15m'?1.5 : tf==='1h'?2.5 : 3.5;
-  const tp2Mult = tf==='15m'?2.5 : tf==='1h'?4.0 : 6.0;
+  // ── F3: DI 方向明确（差距 > 3 即可，降低阈值）──
+  const diDiff = diP - diM;
+  const f_di_long  = diP > diM && diDiff > 3;
+  const f_di_short = diM > diP && -diDiff > 3;
 
-  let dir='wait', confidence=0, sl=0, tp1=0, tp2=0;
-  if(longScore>=4 && longScore>shortScore){
-    dir='long'; confidence=Math.round(50+longScore*9);
-    sl  =+(close-atrSafe*slMult).toFixed(2);
-    tp1 =+(close+atrSafe*tp1Mult).toFixed(2);
-    tp2 =+(close+atrSafe*tp2Mult).toFixed(2);
-  } else if(shortScore>=4 && shortScore>longScore){
-    dir='short'; confidence=Math.round(50+shortScore*9);
-    sl  =+(close+atrSafe*slMult).toFixed(2);
-    tp1 =+(close-atrSafe*tp1Mult).toFixed(2);
-    tp2 =+(close-atrSafe*tp2Mult).toFixed(2);
+  // ── DI 穿越（加分项）──
+  const f_di_cross_up   = diP1 <= diM1 && diP > diM;
+  const f_di_cross_down = diM1 <= diP1 && diM > diP;
+
+  // ── F4: RSI 在合理区间（扩展：多头45-72 / 空头28-55）──
+  const f_rsi_long  = closedRsi >= 45 && closedRsi <= 72;
+  const f_rsi_short = closedRsi <= 55 && closedRsi >= 28;
+
+  // ── F5（软项）: MACD 线在零轴同侧（不硬阻断，仅影响置信度）──
+  const f_zero_long  = closedMacd > 0;
+  const f_zero_short = closedMacd < 0;
+
+  // ── 做多：核心4条件全满 + 零轴软加分 ──
+  const longCore = [
+    f_adx,
+    f_di_long,
+    f_macd_cross_up || f_macd_mom_up,
+    f_rsi_long,
+  ];
+  // ── 做空：核心4条件全满 + 零轴软加分 ──
+  const shortCore = [
+    f_adx,
+    f_di_short,
+    f_macd_cross_down || f_macd_mom_down,
+    f_rsi_short,
+  ];
+
+  const ls = longCore.filter(Boolean).length;
+  const ss = shortCore.filter(Boolean).length;
+
+  // 周期参数
+  const CFG = {
+    '15m':{sl:1.0, tp1:1.5, tp2:2.5},
+    '1h' :{sl:1.5, tp1:2.5, tp2:4.0},
+    '4h' :{sl:2.0, tp1:3.5, tp2:6.0}
+  };
+  const cfg = CFG[tf] || CFG['1h'];
+
+  let dir='wait', conf=0, sl=0, tp1=0, tp2=0;
+
+  // 核心4/4全满 才触发方向信号
+  if(ls === 4 && ls > ss){
+    dir='long';
+    // 基础置信度68，加分：DI穿越+10，MACD金叉+8，零轴同侧+8
+    conf = 68
+      + (f_di_cross_up  ? 10 : 0)
+      + (f_macd_cross_up ? 8 : 0)
+      + (f_zero_long     ? 8 : 0);
+    sl  = +(close - a * cfg.sl ).toFixed(6);
+    tp1 = +(close + a * cfg.tp1).toFixed(6);
+    tp2 = +(close + a * cfg.tp2).toFixed(6);
+  } else if(ss === 4 && ss > ls){
+    dir='short';
+    conf = 68
+      + (f_di_cross_down  ? 10 : 0)
+      + (f_macd_cross_down ? 8 : 0)
+      + (f_zero_short      ? 8 : 0);
+    sl  = +(close + a * cfg.sl ).toFixed(6);
+    tp1 = +(close - a * cfg.tp1).toFixed(6);
+    tp2 = +(close - a * cfg.tp2).toFixed(6);
   } else {
-    dir='wait'; confidence=Math.max(longScore,shortScore)*12;
+    // 等待：显示当前满足几条核心条件
+    conf = Math.max(ls, ss) * 17;
   }
-  const risk=Math.abs(close-sl)||1;
-  const rr=tp1?(Math.abs(tp1-close)/risk).toFixed(1)+'R':'--';
-  return {dir,confidence,entry:close,sl,tp1,tp2,rr,
-    filters:{adx:f1_adx, diDir:f2_diDir, macd:macdHist*prevMacdHist<0,
-             rsi:f4_rsi_l||f4_rsi_s, zero:f5_zero}};
+
+  conf = Math.min(conf, 97);
+  const risk = Math.abs(close - sl) || 1;
+  const rr = tp1 ? (Math.abs(tp1 - close) / risk).toFixed(1) + 'R' : '--';
+
+  return {
+    dir, conf, entry: close, sl, tp1, tp2, rr,
+    score: dir==='long' ? ls : dir==='short' ? ss : Math.max(ls,ss),
+    f:{
+      adx:   f_adx,
+      di:    dir==='long' ? f_di_long  : f_di_short,
+      macd:  dir==='long' ? (f_macd_cross_up||f_macd_mom_up) : (f_macd_cross_down||f_macd_mom_down),
+      rsi:   dir==='long' ? f_rsi_long : f_rsi_short,
+      zero:  dir==='long' ? f_zero_long: f_zero_short,
+    }
+  };
 }
 
-// ══════════════════════════════════════════════
-//  REST  历史K线
-// ══════════════════════════════════════════════
-async function fetchKlines(coin, tf, limit=200){
-  const sym=COINS[coin].symbol.toUpperCase();
-  const url=`${REST_BASE}/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
+// ════════════════════════════════════
+//  REST 历史K线
+// ════════════════════════════════════
+async function fetchKlines(coin,tf,limit=200){
   try{
-    const r=await fetch(url);
-    if(!r.ok)throw new Error(r.status);
+    const sym=COINS[coin].symbol.toUpperCase();
+    const r=await fetch(`${REST}/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${limit}`);
     const raw=await r.json();
-    coinData[coin][tf].klines=raw.map(k=>({
-      t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]
-    }));
-    coinData[coin][tf].indicators=calcIndicators(coinData[coin][tf].klines);
+    data[coin][tf].klines=raw.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+    data[coin][tf].ind=buildInd(data[coin][tf].klines);
     return true;
-  }catch(e){ console.warn('REST fail',coin,tf,e); return false; }
+  }catch(e){ console.warn('REST err',coin,tf,e); return false; }
 }
 
-// ══════════════════════════════════════════════
-//  WebSocket 实时推送
-// ══════════════════════════════════════════════
-function connectWS(coin, tf){
-  if(wsMap[coin][tf]){ try{wsMap[coin][tf].close();}catch(e){} }
-  const sym=COINS[coin].symbol;
-  const url=`${WS_BASE}/ws/${sym}@kline_${tf}`;
-  const ws=new WebSocket(url);
-  wsMap[coin][tf]=ws;
-
-  ws.onopen=()=>{ setConnStatus('ok'); };
+// ════════════════════════════════════
+//  WebSocket
+// ════════════════════════════════════
+function connectWS(coin,tf){
+  if(socks[coin][tf]){ try{socks[coin][tf].close();}catch(e){} }
+  const ws=new WebSocket(`${WS}/ws/${COINS[coin].symbol}@kline_${tf}`);
+  socks[coin][tf]=ws;
+  ws.onopen=()=>setConn('ok');
   ws.onmessage=e=>{
     try{
-      const d=JSON.parse(e.data).k;
-      if(!d)return;
-      const kl={t:d.t,o:+d.o,h:+d.h,l:+d.l,c:+d.c,v:+d.v};
-      const arr=coinData[coin][tf].klines;
+      const k=JSON.parse(e.data).k; if(!k)return;
+      const kl={t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v};
+      const arr=data[coin][tf].klines;
       if(arr.length&&arr[arr.length-1].t===kl.t) arr[arr.length-1]=kl;
       else arr.push(kl);
-      if(arr.length>500)arr.shift();
-      coinData[coin][tf].indicators=calcIndicators(arr);
-      if(coin===activeCoin) renderAll();
+      if(arr.length>600)arr.shift();
+      data[coin][tf].ind=buildInd(arr);
+      if(coin===activeCoin){ renderAll(); }
       updateSidebarCoin(coin);
     }catch(ex){}
   };
-  ws.onclose=()=>{
-    setConnStatus('ng');
-    setTimeout(()=>connectWS(coin,tf),5000);
-  };
+  ws.onclose=()=>{ setConn('ng'); setTimeout(()=>connectWS(coin,tf),5000); };
   ws.onerror=()=>ws.close();
 }
 
-// ══════════════════════════════════════════════
+// ════════════════════════════════════
 //  UI 渲染
-// ══════════════════════════════════════════════
-// 连接状态
-function setConnStatus(s){
-  const dot=document.getElementById('connDot');
-  const txt=document.getElementById('connText');
-  dot.className='conn-dot '+s;
-  txt.textContent=s==='ok'?'已连接':s==='ng'?'断线重连中...':'连接中...';
+// ════════════════════════════════════
+function setConn(s){
+  document.getElementById('connDot').className='conn-dot '+s;
+  document.getElementById('connText').textContent=
+    s==='ok'?'已连接 ●':s==='ng'?'断线重连...':'连接中...';
 }
 
-// 置信度环
-let confChart=null;
-function drawConfRing(pct,dir){
-  const canvas=document.getElementById('confCanvas');
-  const ctx=canvas.getContext('2d');
-  const w=80,r=34,cx=40,cy=40;
-  ctx.clearRect(0,0,w,w);
-  // 背景圆
-  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.strokeStyle='#1e2a3a';ctx.lineWidth=8;ctx.stroke();
-  // 进度
-  const color=dir==='long'?'#00c853':dir==='short'?'#ff3d57':'#ffd600';
-  const end=(pct/100)*Math.PI*2-Math.PI/2;
-  ctx.beginPath();ctx.arc(cx,cy,r,-Math.PI/2,end);
-  ctx.strokeStyle=color;ctx.lineWidth=8;ctx.lineCap='round';ctx.stroke();
-  document.getElementById('confPct').textContent=pct+'%';
-  document.getElementById('confPct').style.color=color;
+function fmt(v,prec){ return v?Number(v).toFixed(prec):'--'; }
+function dColor(d){ return d==='long'?'var(--green)':d==='short'?'var(--red)':'var(--yellow)'; }
+function dClass(d){ return d==='long'?'long':d==='short'?'short':'wait'; }
+function dArrow(d){ return d==='long'?'▲':d==='short'?'▽':'⏸'; }
+function dText(d){ return d==='long'?'做多信号':d==='short'?'做空信号':'等待信号'; }
+
+// ── 置信度环 ──
+function drawRing(pct,dir){
+  const cv=document.getElementById('confCanvas');
+  const ctx=cv.getContext('2d');
+  const r=30,cx=36,cy=36,lw=7;
+  ctx.clearRect(0,0,72,72);
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle='#1e2a3a'; ctx.lineWidth=lw; ctx.stroke();
+  const color=dColor(dir);
+  ctx.beginPath(); ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+(pct/100)*Math.PI*2);
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap='round'; ctx.stroke();
+  const el=document.getElementById('confPct');
+  el.textContent=pct+'%'; el.style.color=color;
 }
 
-// 方向文字
-function dirText(d){ return d==='long'?'做多信号':d==='short'?'做空信号':'等待信号'; }
-function dirArrow(d){ return d==='long'?'▲':d==='short'?'▽':'⏸'; }
-function dirColor(d){ return d==='long'?'var(--green)':d==='short'?'var(--red)':'var(--yellow)'; }
-function dirClass(d){ return d==='long'?'long':d==='short'?'short':'wait'; }
-
-// 渲染三周期确认
-function renderTfConfirm(){
-  const sigMap={};
-  TFS.forEach(tf=>{
-    const ind=coinData[activeCoin][tf].indicators;
-    sigMap[tf]=ind?getSignal(ind,tf):{dir:'wait',confidence:0};
-  });
-
-  // 主信号：以 1h 为主，4h 为趋势参考
-  const main=sigMap[activeTf]||sigMap['1h'];
+// ── 英雄卡 ──
+function renderHero(){
+  const sig=getSignal(data[activeCoin][activeTf].ind, activeTf);
   const hero=document.getElementById('signalHero');
-  hero.className='signal-hero '+dirClass(main.dir);
-  document.getElementById('heroArrow').textContent=dirArrow(main.dir);
-  document.getElementById('heroText').style.color=dirColor(main.dir);
-  document.getElementById('heroText').textContent=dirText(main.dir);
+  hero.className='signal-hero '+dClass(sig.dir);
+  document.getElementById('heroArrow').textContent=dArrow(sig.dir);
+  const ht=document.getElementById('heroText');
+  ht.textContent=dText(sig.dir); ht.style.color=dColor(sig.dir);
   document.getElementById('heroMeta').textContent=
-    `${COINS[activeCoin].display} · ${TF_LABELS[activeTf]} · ${new Date().toLocaleTimeString()}`;
-  drawConfRing(main.confidence,main.dir);
+    `${COINS[activeCoin].display} · ${TF_LABEL[activeTf]} · ${new Date().toLocaleTimeString()}`;
+  drawRing(sig.conf,sig.dir);
 
-  // 过滤 badges
-  const fRow=document.getElementById('filterRow');
-  const labels=['ADX趋势','DI方向','MACD金叉','RSI时机','零轴同侧'];
-  const keys=['adx','diDir','macd','rsi','zero'];
-  fRow.innerHTML=keys.map((k,i)=>{
-    const ok=main.filters&&main.filters[k];
-    return `<span class="badge ${ok?'long':'neutral'}">${ok?'✓':'✗'} ${labels[i]}</span>`;
-  }).join('');
+  // 过滤 badges（4核心条件全亮才触发，零轴为加分项）
+  const labels=['ADX>22','DI差>3','MACD叉','RSI区间'];
+  const keys=['adx','di','macd','rsi'];
+  const passCount = keys.filter(k=>sig.f&&sig.f[k]).length;
 
-  // 三周期盒子
-  ['15m','1h','4h'].forEach(tf=>{
-    const sig=sigMap[tf];
-    const box=document.getElementById('tf'+tf.replace('m','m').replace('h','h'));
-    if(!box)return;
-    box.className='tf-box '+dirClass(sig.dir);
-    const strats={'15m':'短线做单 · R:R 1:1.5<br>止损 ATR×1 · 快进快出',
-                  '1h': '波段做单 · R:R 1:2<br>止损 ATR×1.5 · 持仓4-8h',
-                  '4h': '主趋势 · R:R 1:3<br>止损 ATR×2 · 持仓1-3天'};
-    box.innerHTML=`
-      <div class="tf-label">${TF_LABELS[tf]}
-        <span class="badge tf ${dirClass(sig.dir)}">${dirArrow(sig.dir)} ${dirText(sig.dir).slice(0,2)}</span>
-      </div>
-      <div class="tf-sig" style="color:${dirColor(sig.dir)}">${dirText(sig.dir)}</div>
-      <div class="tf-strat">${strats[tf]}</div>
-    `;
-  });
+  // 获取指标实时值用于调试显示
+  const ind = data[activeCoin][activeTf].ind;
+  let debugLine = '';
+  if(ind){
+    const zeroOk = sig.dir==='long' ? (ind.closedMacd>0?'✓':'✗') : sig.dir==='short' ? (ind.closedMacd<0?'✓':'✗') : (ind.closedMacd>0?'↑':'↓');
+    debugLine = `<div style="margin-top:7px;font-size:10px;color:#4a5568;display:flex;gap:10px;flex-wrap:wrap">
+      <span>ADX:<b style="color:#94a3b8">${ind.adx.toFixed(1)}</b></span>
+      <span>+DI:<b style="color:#94a3b8">${ind.diP.toFixed(1)}</b></span>
+      <span>-DI:<b style="color:#94a3b8">${ind.diM.toFixed(1)}</b></span>
+      <span>RSI:<b style="color:#94a3b8">${ind.closedRsi.toFixed(1)}</b></span>
+      <span>Hist:<b style="color:#94a3b8">${ind.closedHist.toFixed(4)}</b></span>
+      <span>零轴:<b style="color:#94a3b8">${zeroOk} ${ind.closedMacd.toFixed(4)}</b></span>
+    </div>`;
+  }
+
+  document.getElementById('filterRow').innerHTML=
+    keys.map((k,i)=>{
+      const ok=sig.f&&sig.f[k];
+      return `<span class="badge ${ok?'long':'neutral'} sm">${ok?'✓':'✗'} ${labels[i]}</span>`;
+    }).join('')
+    + `<span class="badge ${sig.f&&sig.f.zero?'long':'neutral'} sm" title="软加分项，不阻断信号">${sig.f&&sig.f.zero?'✓':'○'} 零轴</span>`
+    + `<span style="margin-left:8px;font-size:11px;color:#64748b">核心 ${passCount}/4</span>`
+    + debugLine;
+
 
   // 开单参数
-  const p=COINS[activeCoin].precision;
-  document.getElementById('epEntry').textContent=main.entry?main.entry.toFixed(p):'--';
-  document.getElementById('epSL').textContent   =main.sl?main.sl.toFixed(p):'--';
-  document.getElementById('epTP1').textContent  =main.tp1?main.tp1.toFixed(p):'--';
-  document.getElementById('epTP2').textContent  =main.tp2?main.tp2.toFixed(p):'--';
-  document.getElementById('epRR').textContent   =main.rr||'--';
+  const p=COINS[activeCoin].prec;
+  document.getElementById('epEntry').textContent=fmt(sig.entry,p);
+  document.getElementById('epSL').textContent=fmt(sig.sl,p);
+  document.getElementById('epTP1').textContent=fmt(sig.tp1,p);
+  document.getElementById('epTP2').textContent=fmt(sig.tp2,p);
+  document.getElementById('epRR').textContent=sig.rr;
 
-  // 信号历史
-  maybeAddHistory(activeCoin,activeTf,main);
+  maybeAddHistory(activeCoin,activeTf,sig);
 }
 
-// ── K线图 ─────────────────────────────────────
-let priceChart=null;
+// ── 三周期标签 & 盒子 ──
+function renderTfBoxes(){
+  TFS.forEach(tf=>{
+    const sig=getSignal(data[activeCoin][tf].ind,tf);
+    const p=COINS[activeCoin].prec;
+
+    // tab
+    const tab=document.querySelector(`.tf-tab[data-tf="${tf}"]`);
+    if(tab){
+      tab.className='tf-tab'+(tf===activeTf?' active':'');
+      const ts=document.getElementById('tabSig'+tf.replace('m','m').replace('h','h'));
+      if(ts){ ts.textContent=dArrow(sig.dir); ts.style.color=dColor(sig.dir); }
+    }
+    // tab sig span
+    const tsEl=document.getElementById('tabSig'+tf);
+    if(tsEl){ tsEl.textContent=dArrow(sig.dir); tsEl.style.color=dColor(sig.dir); }
+
+    // box
+    const box=document.getElementById('tfbox-'+tf);
+    if(!box)return;
+    box.className='tf-box '+dClass(sig.dir)+(tf===activeTf?' active-tf':'');
+
+    document.getElementById('tfbadge-'+tf).className='badge sm '+dClass(sig.dir);
+    document.getElementById('tfbadge-'+tf).textContent=dArrow(sig.dir)+' '+dText(sig.dir).slice(0,2);
+
+    const sigEl=document.getElementById('tfsig-'+tf);
+    sigEl.textContent=dText(sig.dir); sigEl.style.color=dColor(sig.dir);
+
+    const paramEl=document.getElementById('tfparams-'+tf);
+    if(sig.dir!=='wait' && sig.entry){
+      paramEl.innerHTML=`
+        <span class="tp">入场 <span>${fmt(sig.entry,p)}</span></span>
+        <span class="tp">SL <span style="color:var(--red)">${fmt(sig.sl,p)}</span></span>
+        <span class="tp">TP1 <span style="color:var(--green)">${fmt(sig.tp1,p)}</span></span>
+        <span class="tp">R:R <span>${sig.rr}</span></span>
+      `;
+    } else { paramEl.innerHTML=''; }
+  });
+}
+
+// ── 蜡烛图 ──
+let candleChart=null;
 function renderChart(){
-  const klines=coinData[activeCoin][activeTf].klines;
-  if(!klines.length)return;
-  const labels=klines.slice(-80).map(k=>new Date(k.t).toLocaleTimeString('zh',{hour:'2-digit',minute:'2-digit'}));
-  const closes=klines.slice(-80).map(k=>k.c);
+  const klines=data[activeCoin][activeTf].klines;
+  if(klines.length<2)return;
+  const slice=klines.slice(-100);
+  const ohlc=slice.map(k=>({x:k.t, o:k.o, h:k.h, l:k.l, c:k.c}));
+
   const ctx=document.getElementById('priceChart').getContext('2d');
-  if(priceChart)priceChart.destroy();
-  priceChart=new Chart(ctx,{
-    type:'line',
-    data:{labels,datasets:[{
-      label:'收盘价',data:closes,
-      borderColor:COINS[activeCoin].color,borderWidth:1.5,
-      pointRadius:0,fill:false,tension:.3
-    }]},
+  if(candleChart){ candleChart.destroy(); candleChart=null; }
+
+  candleChart=new Chart(ctx,{
+    type:'candlestick',
+    data:{
+      datasets:[{
+        label: COINS[activeCoin].display,
+        data: ohlc,
+        color:{
+          up:   '#00c853',
+          down: '#ff3d57',
+          unchanged: '#94a3b8'
+        },
+        borderColor:{
+          up:   '#00c853',
+          down: '#ff3d57',
+          unchanged: '#94a3b8'
+        }
+      }]
+    },
     options:{
-      responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false}},
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label(ctx){
+              const d=ctx.raw;
+              return [`开: ${d.o}`, `高: ${d.h}`, `低: ${d.l}`, `收: ${d.c}`];
+            }
+          }
+        }
+      },
       scales:{
-        x:{ticks:{color:'#4a5568',maxTicksLimit:10},grid:{color:'rgba(255,255,255,.03)'}},
-        y:{ticks:{color:'#4a5568'},grid:{color:'rgba(255,255,255,.05)'}}
+        x:{
+          type:'timeseries',
+          time:{unit: activeTf==='15m'?'minute': activeTf==='1h'?'hour':'hour',
+                tooltipFormat:'MM-dd HH:mm'},
+          ticks:{color:'#4a5568', maxTicksLimit:8, maxRotation:0},
+          grid:{color:'rgba(255,255,255,.03)'}
+        },
+        y:{
+          ticks:{color:'#4a5568'},
+          grid:{color:'rgba(255,255,255,.04)'}
+        }
       }
     }
   });
+
   document.getElementById('chartTitle').textContent=
-    `${COINS[activeCoin].display} · ${TF_LABELS[activeTf]}`;
+    `${COINS[activeCoin].display} · ${TF_LABEL[activeTf]}`;
 }
 
+// ── 侧边栏 ──
+function buildSidebar(){
+  const sb=document.getElementById('sidebar');
+  Object.keys(COINS).forEach(coin=>{
+    const div=document.createElement('div');
+    div.className='coin-card'+(coin===activeCoin?' active':'');
+    div.id='sb-'+coin;
+    div.onclick=()=>selectCoin(coin);
+    div.innerHTML=`
+      <div class="cn" style="color:${COINS[coin].color}">${coin}
+        <small style="color:#4a5568;font-weight:400;font-size:10px">USDT</small></div>
+      <div class="cp" id="sbp-${coin}">--</div>
+      <div class="sig-badges" id="sbb-${coin}"></div>
+    `;
+    sb.appendChild(div);
+  });
+}
+
+function updateSidebarCoin(coin){
+  const ind=data[coin]['1h'].ind;
+  const el=document.getElementById('sbp-'+coin);
+  if(el&&ind) el.textContent=fmt(ind.close,COINS[coin].prec);
+  const bb=document.getElementById('sbb-'+coin);
+  if(bb){
+    bb.innerHTML=TFS.map(tf=>{
+      const s=getSignal(data[coin][tf].ind,tf);
+      return `<span class="badge sm ${dClass(s.dir)}">${tf} ${dArrow(s.dir)}</span>`;
+    }).join('');
+  }
+}
+
+// ── 切换 ──
+function selectCoin(coin){
+  activeCoin=coin;
+  document.querySelectorAll('.coin-card').forEach(e=>e.classList.remove('active'));
+  const el=document.getElementById('sb-'+coin); if(el)el.classList.add('active');
+  renderAll();
+}
+
+function selectTf(tf){
+  activeTf=tf;
+  renderAll();
+}
+
+// ── 历史 ──
+// 冷却时间：不同周期不同冷却（防止未完成K线疯狂触发）
+const COOLDOWN_MS = {'15m': 15*60*1000, '1h': 60*60*1000, '4h': 4*60*60*1000};
+
+function maybeAddHistory(coin, tf, sig){
+  if(sig.dir === 'wait') return;
+
+  const key = `${coin}|${tf}|${sig.dir}`;
+  const now = Date.now();
+  const last = sigCooldown.get(key) || 0;
+  const cd = COOLDOWN_MS[tf] || 15*60*1000;
+
+  // 冷却期内不重复触发
+  if(now - last < cd) return;
+  sigCooldown.set(key, now);
+
+  sigHist.unshift({
+    time: new Date().toLocaleTimeString(),
+    coin, tf,
+    dir: sig.dir, entry: sig.entry, sl: sig.sl, tp1: sig.tp1,
+    conf: sig.conf, score: sig.score
+  });
+  if(sigHist.length > 30) sigHist.pop();
+  renderHistory();
+  showToast(coin, tf, sig);
+}
+
+function renderHistory(){
+  const tb=document.getElementById('historyBody');
+  if(!sigHist.length){
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#4a5568;padding:16px">等待信号...</td></tr>';
+    return;
+  }
+  tb.innerHTML=sigHist.map(h=>{
+    const p=COINS[h.coin].prec;
+    return `<tr>
+      <td>${h.time}</td>
+      <td style="color:${COINS[h.coin].color}">${h.coin}</td>
+      <td>${TF_LABEL[h.tf]}</td>
+      <td><span class="badge sm ${dClass(h.dir)}">${dArrow(h.dir)} ${dText(h.dir).slice(0,2)}</span></td>
+      <td>${fmt(h.entry,p)}</td>
+      <td style="color:var(--red)">${fmt(h.sl,p)}</td>
+      <td style="color:var(--green)">${fmt(h.tp1,p)}</td>
+      <td>${h.conf}% <small style="color:#4a5568">(${h.score||5}/5)</small></td>
+    </tr>`;
+  }).join('');
+}
+
+
+// ── Toast ──
+function showToast(coin,tf,sig){
+  const wrap=document.getElementById('toastWrap');
+  const t=document.createElement('div');
+  t.className='toast '+dClass(sig.dir);
+  const p=COINS[coin].prec;
+  t.innerHTML=`
+    <div class="toast-title">${dArrow(sig.dir)} ${COINS[coin].display} ${dText(sig.dir)} [${TF_LABEL[tf]}]</div>
+    <div class="toast-body">
+      入场: ${fmt(sig.entry,p)} · SL: ${fmt(sig.sl,p)}<br>
+      TP1: ${fmt(sig.tp1,p)} · TP2: ${fmt(sig.tp2,p)}<br>
+      盈亏比: ${sig.rr} · 置信度: ${sig.conf}%
+    </div>`;
+  wrap.prepend(t);
+  setTimeout(()=>t.remove(),12000);
+}
+
+// ── 全量渲染 ──
 function renderAll(){
-  renderTfConfirm();
+  renderHero();
+  renderTfBoxes();
   renderChart();
+  Object.keys(COINS).forEach(updateSidebarCoin);
   document.getElementById('lastUpdateTime').textContent=new Date().toLocaleTimeString();
 }
 
-// ── 侧边栏 ────────────────────────────────────
-function updateSidebarCoin(coin){
-  const el=document.getElementById('sidebar-'+coin);
-  if(!el)return;
-  const ind=coinData[coin]['1h'].indicators;
-  const price=ind?ind.close:0;
-  const sig15=coinData[coin]['15m'].indicators?getSignal(coinData[coin]['15m'].indicators,'15m'):{dir:'wait'};
-  const sig1h =ind?getSignal(ind,'1h'):{dir:'wait'};
-  const sig4h =coinData[coin]['4h'].indicators?getSignal(coinData[coin]['4h'].indicators,'4h'):{dir:'wait'};
-  const p=COINS[coin].precision;
-  el.querySelector('.price').textContent=price?price.toFixed(p):'--';
-  el.querySelector('.sig-badges').innerHTML=
-    ['15m','1h','4h'].map((tf,i)=>{
-      const d=[sig15,sig1h,sig4h][i].dir;
-      return `<span class="badge ${dirClass(d)} tf">${tf} ${dirArrow(d)}</span>`;
-    }).join('');
+// ════════════════════════════════════
+//  涨幅榜 + 策略观察
+// ════════════════════════════════════
+let rankData     = [];   // 全量 24h ticker
+let rankTab      = 'up'; // 'up' | 'down'
+let watchList    = [];   // [{symbol, display, prec, chgPct, ind:{15m,1h,4h}}]
+let watchSym     = null; // 当前策略观察的 symbol（仅涨跌榜里的）
+const watchKlines= {};   // watchKlines[symbol][tf] = klines[]
+
+// ── 拉取涨幅榜（过滤 USDT 永续合约）──
+async function fetchRankList(){
+  try{
+    const r = await fetch(`${REST}/fapi/v1/ticker/24hr`);
+    const all = await r.json();
+    // 只要 USDT 结尾 + 非固定日期合约 + 24h成交额 > 5000w USDT
+    rankData = all
+      .filter(t => t.symbol.endsWith('USDT') && !/[0-9]{6}$/.test(t.symbol.replace('USDT',''))
+               && parseFloat(t.quoteVolume) > 5e7)
+      .map(t => ({
+        symbol   : t.symbol,
+        display  : t.symbol.replace('USDT','') + '/USDT',
+        coin     : t.symbol.replace('USDT',''),
+        prec     : getPrecision(parseFloat(t.lastPrice)),
+        price    : parseFloat(t.lastPrice),
+        chgPct   : parseFloat(t.priceChangePercent),
+        vol      : parseFloat(t.quoteVolume),
+      }))
+      .sort((a,b) => b.chgPct - a.chgPct);
+    renderRankList();
+    // 顺带刷新观察列表里的最新价格
+    watchList.forEach(w=>{
+      const t = rankData.find(r=>r.symbol===w.symbol);
+      if(t){ w.price=t.price; w.chgPct=t.chgPct; }
+    });
+    renderWatchList();
+  }catch(e){ console.warn('rankList err',e); }
 }
 
-function buildSidebar(){
-  const sb=document.getElementById('sidebar');
-  const div=document.createElement('div');
-  Object.keys(COINS).forEach(coin=>{
-    div.innerHTML=`
-      <div class="coin-card${coin===activeCoin?' active':''}" id="sidebar-${coin}"
-           onclick="selectCoin('${coin}')">
-        <div class="name" style="color:${COINS[coin].color}">${coin}</div>
-        <div class="price">--</div>
-        <div class="chg" id="chg-${coin}"></div>
-        <div class="sig-badges"></div>
-      </div>`;
-    sb.appendChild(div.firstElementChild);
-  });
+function getPrecision(price){
+  if(price >= 1000) return 1;
+  if(price >= 10)   return 2;
+  if(price >= 1)    return 3;
+  return 4;
 }
 
-function selectCoin(coin){
-  activeCoin=coin;
-  document.querySelectorAll('.coin-card').forEach(el=>el.classList.remove('active'));
-  const el=document.getElementById('sidebar-'+coin);
-  if(el)el.classList.add('active');
-  renderAll();
-}
+// ── 渲染榜单 ──
+function renderRankList(){
+  const el = document.getElementById('rankList');
+  const list = rankTab === 'up'
+    ? rankData.slice(0, 15)
+    : [...rankData].sort((a,b)=>a.chgPct-b.chgPct).slice(0,15);
 
-// ── 信号历史 ──────────────────────────────────
-let lastSignalKey='';
-function maybeAddHistory(coin,tf,sig){
-  if(sig.dir==='wait')return;
-  const key=`${coin}|${tf}|${sig.dir}|${sig.entry}`;
-  if(key===lastSignalKey)return;
-  lastSignalKey=key;
-  signalHistory.unshift({
-    time:new Date().toLocaleTimeString(),coin,tf,
-    dir:sig.dir,entry:sig.entry,sl:sig.sl,tp1:sig.tp1,
-    conf:sig.confidence
-  });
-  if(signalHistory.length>20)signalHistory.pop();
-  renderHistory();
-  showToast(coin,tf,sig);
-}
-function renderHistory(){
-  const tb=document.getElementById('historyBody');
-  if(!signalHistory.length){
-    tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#4a5568;padding:20px">等待信号...</td></tr>';
+  if(!list.length){
+    el.innerHTML='<div style="text-align:center;color:#374151;padding:20px;font-size:12px">暂无数据</div>';
     return;
   }
-  tb.innerHTML=signalHistory.map(h=>`
-    <tr>
-      <td>${h.time}</td>
-      <td><span class="badge ${h.dir}" style="font-size:11px">${h.coin} ${dirArrow(h.dir)}</span></td>
-      <td>${(h.entry||0).toFixed(COINS[h.coin].precision)}</td>
-      <td style="color:var(--red)">${(h.sl||0).toFixed(COINS[h.coin].precision)}</td>
-      <td style="color:var(--green)">${(h.tp1||0).toFixed(COINS[h.coin].precision)}</td>
-      <td>${h.conf}%</td>
-      <td>--</td>
-    </tr>
-  `).join('');
-}
-
-// ── Toast ─────────────────────────────────────
-function showToast(coin,tf,sig){
-  const wrap=document.getElementById('toastWrap');
-  const toast=document.createElement('div');
-  toast.className='toast '+dirClass(sig.dir);
-  const p=COINS[coin].precision;
-  toast.innerHTML=`
-    <div class="toast-title">${dirArrow(sig.dir)} ${COINS[coin].display} ${dirText(sig.dir)} [${TF_LABELS[tf]}]</div>
-    <div class="toast-body">
-      入场: ${sig.entry.toFixed(p)} &nbsp;|&nbsp; 止损: ${(sig.sl||0).toFixed(p)}<br>
-      TP1: ${(sig.tp1||0).toFixed(p)} &nbsp;|&nbsp; TP2: ${(sig.tp2||0).toFixed(p)}<br>
-      盈亏比: ${sig.rr} &nbsp;|&nbsp; 置信度: ${sig.confidence}%
+  el.innerHTML = list.map((t,i)=>{
+    const isWatch = watchList.some(w=>w.symbol===t.symbol);
+    const isCoreFixed = Object.values(COINS).some(c=>c.symbol.toUpperCase()===t.symbol);
+    const chgColor = t.chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+    const chgStr   = (t.chgPct >= 0 ? '+' : '') + t.chgPct.toFixed(2) + '%';
+    // 查看是否已有信号
+    const wItem = watchList.find(w=>w.symbol===t.symbol);
+    const sigStr = wItem && wItem.sig1h ? getSigEmoji(wItem.sig1h.dir) : '';
+    return `<div class="rank-row ${isWatch?'watching':''}" 
+      onclick="toggleWatch('${t.symbol}','${t.display}',${t.prec},${t.chgPct})">
+      <span class="rr-num">${i+1}</span>
+      <span class="rr-sym">${t.coin}<small style="color:#4a5568;font-weight:400">/${isCoreFixed?'★':'U'}</small></span>
+      <span class="rr-chg" style="color:${chgColor}">${chgStr}</span>
+      <span class="rr-sig">${sigStr}</span>
     </div>`;
-  wrap.prepend(toast);
-  setTimeout(()=>toast.remove(),12000);
+  }).join('');
 }
 
-// ══════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════
-async function init(){
-  buildSidebar();
-  setConnStatus('wait');
+function getSigEmoji(dir){
+  return dir==='long'?'<span style="color:var(--green)">▲</span>'
+        :dir==='short'?'<span style="color:var(--red)">▽</span>':'';
+}
 
-  // 并发拉取所有币种×时间框架的历史数据
-  const tasks=[];
-  for(const coin of Object.keys(COINS)){
-    for(const tf of TFS){
-      tasks.push(fetchKlines(coin,tf));
-    }
+// ── 切换涨/跌榜 ──
+function switchRankTab(tab){
+  rankTab = tab;
+  document.getElementById('rankTabUp').className   = 'rank-tab up'  +(tab==='up'  ?' active':'');
+  document.getElementById('rankTabDown').className = 'rank-tab down'+(tab==='down'?' active':'');
+  renderRankList();
+}
+
+// ── 添加/移除策略观察 ──
+function toggleWatch(symbol, display, prec, chgPct){
+  // 如果是固定4币种，直接切换主视图
+  const coreKey = Object.keys(COINS).find(k=>COINS[k].symbol.toUpperCase()===symbol);
+  if(coreKey){ selectCoin(coreKey); return; }
+
+  const idx = watchList.findIndex(w=>w.symbol===symbol);
+  if(idx >= 0){
+    // 已在列表 → 点击进入观察视图
+    enterWatchView(symbol);
+  } else {
+    // 加入观察列表
+    watchList.push({ symbol, display, prec, chgPct, price:0,
+                     sig15m:null, sig1h:null, sig4h:null, loading:true });
+    renderWatchList();
+    renderRankList();
+    // 异步加载该币种数据
+    loadWatchSymbol(symbol);
   }
-  await Promise.allSettled(tasks);
+}
 
-  // 建立 WebSocket（只连当前激活币种 + 所有tf）
-  function connectActive(){
-    Object.keys(COINS).forEach(coin=>{
-      TFS.forEach(tf=>connectWS(coin,tf));
+// ── 加载观察币种的 K线 + 指标 ──
+async function loadWatchSymbol(symbol){
+  if(!watchKlines[symbol]) watchKlines[symbol] = {};
+  await Promise.all(TFS.map(async tf=>{
+    try{
+      const r = await fetch(`${REST}/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=200`);
+      const raw = await r.json();
+      watchKlines[symbol][tf] = raw.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+    }catch(e){ watchKlines[symbol][tf]=[]; }
+  }));
+
+  const w = watchList.find(x=>x.symbol===symbol);
+  if(!w) return;
+  w.loading = false;
+  // 计算三个周期信号
+  w.sig15m = null; w.sig1h = null; w.sig4h = null;
+  const ind15m = buildInd(watchKlines[symbol]['15m']||[]);
+  const ind1h  = buildInd(watchKlines[symbol]['1h'] ||[]);
+  const ind4h  = buildInd(watchKlines[symbol]['4h'] ||[]);
+  if(ind15m) w.sig15m = getSignal(ind15m,'15m');
+  if(ind1h)  w.sig1h  = getSignal(ind1h, '1h');
+  if(ind4h)  w.sig4h  = getSignal(ind4h, '4h');
+  w.price = watchKlines[symbol]['1h']?.slice(-1)[0]?.c || 0;
+
+  renderWatchList();
+  renderRankList();
+
+
+  // 同时启动 WS 实时更新（只订阅 1h，节省连接数）
+  startWatchWS(symbol);
+}
+
+// ── 观察币种 WebSocket（1h ticker 价格+信号实时更新）──
+const watchWS = {};
+function startWatchWS(symbol){
+  if(watchWS[symbol]) return;
+  const ws = new WebSocket(`${WS}/ws/${symbol.toLowerCase()}@kline_1h`);
+  watchWS[symbol] = ws;
+  ws.onmessage = e => {
+    try{
+      const k = JSON.parse(e.data).k; if(!k) return;
+      const kl = {t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v};
+      const arr = watchKlines[symbol]['1h'];
+      if(!arr) return;
+      if(arr.length && arr[arr.length-1].t===kl.t) arr[arr.length-1]=kl;
+      else arr.push(kl);
+      if(arr.length>600)arr.shift();
+      const w = watchList.find(x=>x.symbol===symbol);
+      if(w){
+        const ind = buildInd(arr);
+        w.sig1h = ind ? getSignal(ind,'1h') : null;
+        w.price = kl.c;
+        renderWatchList();
+        renderRankList();
+      }
+    }catch(ex){}
+  };
+  ws.onclose = () => { delete watchWS[symbol]; };
+}
+
+// ── 渲染观察列表 ──
+function renderWatchList(){
+  const el = document.getElementById('watchList');
+  if(!watchList.length){
+    el.innerHTML = '<div class="watch-empty">点击榜单币种添加观察</div>';
+    return;
+  }
+  el.innerHTML = watchList.map(w=>{
+    const tfSigs = ['15m','1h','4h'].map(tf=>{
+      const s = w['sig'+tf]; 
+      const d = s ? s.dir : 'wait';
+      return `<span class="badge sm ${dClass(d)}">${tf} ${dArrow(d)}</span>`;
+    }).join('');
+    const chgColor = w.chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+    const chgStr   = (w.chgPct>=0?'+':'')+w.chgPct.toFixed(2)+'%';
+    return `<div class="watch-card ${watchSym===w.symbol?'active':''}"
+              onclick="enterWatchView('${w.symbol}')">
+      <div class="wc-top">
+        <span class="wc-sym">${w.display.replace('/USDT','')}</span>
+        <span style="font-size:11px;color:${chgColor}">${chgStr}</span>
+        <span class="wc-remove" onclick="event.stopPropagation();removeWatch('${w.symbol}')">✕</span>
+      </div>
+      <div class="wc-price" style="color:#64748b">${w.price?(+w.price).toFixed(w.prec):'--'}</div>
+      <div class="wc-sigs">${w.loading?'<span style="color:#4a5568;font-size:10px">计算中...</span>':tfSigs}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 移除观察 ──
+function removeWatch(symbol){
+  watchList = watchList.filter(w=>w.symbol!==symbol);
+  if(watchSym===symbol){ watchSym=null; }
+  if(watchWS[symbol]){ try{watchWS[symbol].close();}catch(e){} delete watchWS[symbol]; }
+  renderWatchList();
+  renderRankList();
+}
+
+// ── 清空观察列表 ──
+function clearWatchList(){
+  watchList.forEach(w=>{ if(watchWS[w.symbol]) try{watchWS[w.symbol].close();}catch(e){} });
+  watchList = []; watchSym = null;
+  renderWatchList(); renderRankList();
+}
+
+// ── 进入策略观察详情视图 ──
+// 复用主内容区的渲染逻辑，但数据来自 watchKlines
+function enterWatchView(symbol){
+  watchSym = symbol;
+  const w = watchList.find(x=>x.symbol===symbol);
+  if(!w) return;
+
+  // 把主视图切换到这个 symbol：
+  // 临时把 activeCoin 设为一个特殊值，通过 override 渲染
+  renderWatchDetail(w);
+  renderWatchList();
+}
+
+function renderWatchDetail(w){
+  // 用 1h 信号渲染英雄卡
+  const sig = w.sig1h || {dir:'wait',conf:0,f:{},entry:0,sl:0,tp1:0,tp2:0,rr:'--',score:0};
+  const hero = document.getElementById('signalHero');
+  hero.className = 'signal-hero ' + dClass(sig.dir);
+  document.getElementById('heroArrow').textContent = dArrow(sig.dir);
+  const ht = document.getElementById('heroText');
+  ht.textContent = dText(sig.dir); ht.style.color = dColor(sig.dir);
+  document.getElementById('heroMeta').textContent =
+    `${w.display} · 1小时 · 策略观察 · ${new Date().toLocaleTimeString()}`;
+  drawRing(sig.conf, sig.dir);
+
+  // 过滤 badges（策略观察视图，4核心+零轴软加分）
+  const labels=['ADX>22','DI差>3','MACD叉','RSI区间'];
+  const keys=['adx','di','macd','rsi'];
+  const passCount = keys.filter(k=>sig.f&&sig.f[k]).length;
+  document.getElementById('filterRow').innerHTML =
+    keys.map((k,i)=>{
+      const ok=sig.f&&sig.f[k];
+      return `<span class="badge ${ok?'long':'neutral'} sm">${ok?'✓':'✗'} ${labels[i]}</span>`;
+    }).join('')
+    + `<span class="badge ${sig.f&&sig.f.zero?'long':'neutral'} sm" title="软加分项">
+        ${sig.f&&sig.f.zero?'✓':'○'} 零轴</span>`
+    + `<span style="margin-left:8px;font-size:11px;color:#64748b">核心 ${passCount}/4</span>`;
+
+  // 开单参数
+  const p = w.prec;
+  document.getElementById('epEntry').textContent = fmt(sig.entry,p);
+  document.getElementById('epSL').textContent    = fmt(sig.sl,p);
+  document.getElementById('epTP1').textContent   = fmt(sig.tp1,p);
+  document.getElementById('epTP2').textContent   = fmt(sig.tp2,p);
+  document.getElementById('epRR').textContent    = sig.rr;
+
+  // 三周期盒子
+  ['15m','1h','4h'].forEach(tf=>{
+    const s = w['sig'+tf] || {dir:'wait',conf:0,entry:0,sl:0,tp1:0,tp2:0,rr:'--'};
+    const box = document.getElementById('tfbox-'+tf);
+    if(!box) return;
+    box.className = 'tf-box '+dClass(s.dir)+(tf===activeTf?' active-tf':'');
+    document.getElementById('tfbadge-'+tf).className='badge sm '+dClass(s.dir);
+    document.getElementById('tfbadge-'+tf).textContent=dArrow(s.dir)+' '+dText(s.dir).slice(0,2);
+    const sigEl = document.getElementById('tfsig-'+tf);
+    sigEl.textContent=dText(s.dir); sigEl.style.color=dColor(s.dir);
+    const paramEl = document.getElementById('tfparams-'+tf);
+    if(s.dir!=='wait'&&s.entry){
+      paramEl.innerHTML=`
+        <span class="tp">入场 <span>${fmt(s.entry,p)}</span></span>
+        <span class="tp">SL <span style="color:var(--red)">${fmt(s.sl,p)}</span></span>
+        <span class="tp">TP1 <span style="color:var(--green)">${fmt(s.tp1,p)}</span></span>
+        <span class="tp">R:R <span>${s.rr}</span></span>`;
+    } else { paramEl.innerHTML=''; }
+  });
+
+  // 渲染 1h 蜡烛图
+  const klines = watchKlines[w.symbol]&&watchKlines[w.symbol]['1h'] || [];
+  if(klines.length >= 2){
+    const slice = klines.slice(-100);
+    const ohlc  = slice.map(k=>({x:k.t,o:k.o,h:k.h,l:k.l,c:k.c}));
+    const ctx   = document.getElementById('priceChart').getContext('2d');
+    if(candleChart){ candleChart.destroy(); candleChart=null; }
+    candleChart = new Chart(ctx,{
+      type:'candlestick',
+      data:{datasets:[{
+        label:w.display,
+        data:ohlc,
+        color:{up:'#00c853',down:'#ff3d57',unchanged:'#94a3b8'},
+        borderColor:{up:'#00c853',down:'#ff3d57',unchanged:'#94a3b8'}
+      }]},
+      options:{
+        responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{type:'timeseries',time:{unit:'hour',tooltipFormat:'MM-dd HH:mm'},
+             ticks:{color:'#4a5568',maxTicksLimit:8,maxRotation:0},
+             grid:{color:'rgba(255,255,255,.03)'}},
+          y:{ticks:{color:'#4a5568'},grid:{color:'rgba(255,255,255,.04)'}}
+        }
+      }
     });
   }
-  connectActive();
+  document.getElementById('chartTitle').textContent = `${w.display} · 1小时 · 策略观察`;
+
+  // 取消侧边栏高亮（当前是观察视图）
+  document.querySelectorAll('.coin-card').forEach(e=>e.classList.remove('active'));
+}
+
+// ── 定时刷新涨幅榜（30秒一次）──
+let rankTimer = null;
+function startRankAutoRefresh(){
+  fetchRankList();
+  rankTimer = setInterval(fetchRankList, 30000);
+}
+
+// ════════════════════════════════════
+//  初始化
+// ════════════════════════════════════
+async function init(){
+  buildSidebar();
+  setConn('wait');
+
+  // 并发拉取所有历史数据
+  await Promise.allSettled(
+    Object.keys(COINS).flatMap(c=>TFS.map(tf=>fetchKlines(c,tf)))
+  );
+
+  // 建立所有 WebSocket
+  Object.keys(COINS).forEach(c=>TFS.forEach(tf=>connectWS(c,tf)));
 
   renderAll();
-  Object.keys(COINS).forEach(c=>updateSidebarCoin(c));
+
+  // 启动涨幅榜
+  startRankAutoRefresh();
 }
 
 document.addEventListener('DOMContentLoaded', init);
